@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  AUTOBUILD_VARIABLES_FILE: ${{ github.workspace }}\build-variables\variables
-  AUTOBUILD_INSTALLABLE_CACHE: ${{ github.workspace }}\.autobuild-installables
+  AUTOBUILD_VARIABLES_FILE: ${{ github.workspace }}/build-variables/variables
+  AUTOBUILD_INSTALLABLE_CACHE: ${{ github.workspace }}/.autobuild-installables
   AUTOBUILD_VSVER: "170"
   PYTHONUTF8: "1"
 
@@ -38,9 +38,14 @@ jobs:
           path: build-variables
 
       - name: Set up Python
+        id: py311
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+
+      - name: Set Python environment for CMake
+        shell: bash
+        run: echo "PYTHON=${{ steps.py311.outputs.python-path }}" >> "$GITHUB_ENV"
 
       - name: Install Autobuild dependencies
         shell: pwsh
@@ -81,7 +86,7 @@ jobs:
             blazing-windows64-
 
       - name: Configure Blazing Storm package
-        shell: cmd
+        shell: bash
         run: >
           autobuild configure -A 64 -c ReleaseFS_open --
           --package
@@ -89,7 +94,7 @@ jobs:
           -DLL_TESTS:BOOL=FALSE
 
       - name: Build installer
-        shell: cmd
+        shell: bash
         run: autobuild build -A 64 -c ReleaseFS_open --no-configure
 
       - name: Collect latest installer
