@@ -1,6 +1,6 @@
 /**
  * @file bslocaltransport.cpp
- * @brief Loopback-only transport for testing two Blazing Storm viewers.
+ * @brief Blazing Storm possession protocol over local loopback or WSS relay.
  */
 
 #include "llviewerprecompiledheaders.h"
@@ -15,6 +15,7 @@
 #include "blazingstorm/remote/bstruststore.h"
 #include "blazingstorm/remote/bsworldinteraction.h"
 #include "blazingstorm/remote/bsremotefeatures.h"
+#include "blazingstorm/remote/bsrelaytransport.h"
 #include "fscommon.h"
 #include "fsnearbychathub.h"
 #include "llagent.h"
@@ -30,6 +31,7 @@
 
 #include <array>
 #include <charconv>
+#include <cctype>
 #include <random>
 #include <sstream>
 #include <system_error>
@@ -61,6 +63,79 @@ namespace
         const char* last = first + value.size();
         auto result = std::from_chars(first, last, sequence);
         return result.ec == std::errc() && result.ptr == last;
+    }
+
+    std::string jsonString(const std::string& value)
+    {
+        std::string out;
+        out.reserve(value.size() + 8);
+        for (const unsigned char ch : value)
+        {
+            switch (ch)
+            {
+                case '\\': out += "\\\\"; break;
+                case '"': out += "\\\""; break;
+                case '\b': out += "\\b"; break;
+                case '\f': out += "\\f"; break;
+                case '\n': out += "\\n"; break;
+                case '\r': out += "\\r"; break;
+                case '\t': out += "\\t"; break;
+                default:
+                    if (ch >= 0x20) out.push_back(static_cast<char>(ch));
+                    break;
+            }
+        }
+        return out;
+    }
+
+    bool extractJsonString(const std::string& json,
+                           const std::string& key,
+                           std::string& value)
+    {
+        const std::string marker = "\"" + key + "\":";
+        const auto key_pos = json.find(marker);
+        if (key_pos == std::string::npos) return false;
+        auto pos = key_pos + marker.size();
+        while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos]))) ++pos;
+        if (pos >= json.size() || json[pos] != '"') return false;
+        ++pos;
+
+        value.clear();
+        while (pos < json.size())
+        {
+            const char ch = json[pos++];
+            if (ch == '"') return true;
+            if (ch != '\\')
+            {
+                value.push_back(ch);
+                continue;
+            }
+            if (pos >= json.size()) return false;
+            const char esc = json[pos++];
+            switch (esc)
+            {
+                case '"': value.push_back('"'); break;
+                case '\\': value.push_back('\\'); break;
+                case '/': value.push_back('/'); break;
+                case 'b': value.push_back('\b'); break;
+                case 'f': value.push_back('\f'); break;
+                case 'n': value.push_back('\n'); break;
+                case 'r': value.push_back('\r'); break;
+                case 't': value.push_back('\t'); break;
+                default: return false;
+            }
+        }
+        return false;
+    }
+
+    bool validRelayTokenPart(const std::string& value, std::size_t max_length)
+    {
+        if (value.empty() || value.size() > max_length) return false;
+        for (const unsigned char ch : value)
+        {
+            if (!std::isalnum(ch) && ch != '-' && ch != '_') return false;
+        }
+        return true;
     }
 }
 
@@ -150,6 +225,243 @@ namespace BlazingStorm
             }
         }
         return true;
+    }
+
+
+    std::string LocalTransport::buildRelayRequestMessage(
+        const std::string& controller_id,
+        const std::string& nonce) const
+    {
+        return std::string("\xF0\x9F\x8C\x90 Blazing Storm relay request.\n")
+            + "[Blazing Storm relay request v1 | " + controller_id + " | " + nonce + "]";
+    }
+
+    std::string LocalTransport::buildRelayInviteMessage(
+        const std::string& subject_id,
+        const std::string& session_id,
+        const std::string& controller_token,
+        const std::string& nonce) const
+    {
+        return std::string("\xF0\x9F\x94\x90 Blazing Storm relay invitation.\n")
+            + "[Blazing Storm relay invite v1 | " + subject_id + " | "
+            + session_id + " | " + controller_token + " | " + nonce + "]";
+    }
+
+    bool LocalTransport::parseRelayRequestMessage(
+        const std::string& message,
+        std::string& controller_id,
+        std::string& nonce) const
+    {
+        static const std::string prefix = "[Blazing Storm relay request v1 | ";
+        const auto begin = message.rfind(prefix);
+        if (begin == std::string::npos || message.empty() || message.back() != ']') return false;
+        const auto id_begin = begin + prefix.size();
+        const auto sep = message.find(" | ", id_begin);
+        if (sep == std::string::npos) return false;
+        controller_id = message.substr(id_begin, sep - id_begin);
+        nonce = message.substr(sep + 3, message.size() - (sep + 3) - 1);
+        LLUUID id(controller_id);
+        return id.notNull() && nonce.size() == 16
+            && std::all_of(nonce.begin(), nonce.end(), [](char ch)
+            {
+                return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+            });
+    }
+
+    bool LocalTransport::parseRelayInviteMessage(
+        const std::string& message,
+        std::string& subject_id,
+        std::string& session_id,
+        std::string& controller_token,
+        std::string& nonce) const
+    {
+        static const std::string prefix = "[Blazing Storm relay invite v1 | ";
+        const auto begin = message.rfind(prefix);
+        if (begin == std::string::npos || message.empty() || message.back() != ']') return false;
+
+        const auto subject_begin = begin + prefix.size();
+        const auto sep1 = message.find(" | ", subject_begin);
+        const auto sep2 = sep1 == std::string::npos ? std::string::npos : message.find(" | ", sep1 + 3);
+        const auto sep3 = sep2 == std::string::npos ? std::string::npos : message.find(" | ", sep2 + 3);
+        if (sep1 == std::string::npos || sep2 == std::string::npos || sep3 == std::string::npos) return false;
+
+        subject_id = message.substr(subject_begin, sep1 - subject_begin);
+        session_id = message.substr(sep1 + 3, sep2 - (sep1 + 3));
+        controller_token = message.substr(sep2 + 3, sep3 - (sep2 + 3));
+        nonce = message.substr(sep3 + 3, message.size() - (sep3 + 3) - 1);
+
+        LLUUID subject_uuid(subject_id);
+        return subject_uuid.notNull()
+            && validRelayTokenPart(session_id, 64)
+            && validRelayTokenPart(controller_token, 128)
+            && nonce == mBootstrapNonce;
+    }
+
+    bool LocalTransport::startRelaySubject(
+        const std::string& controller_id,
+        const std::string& controller_name,
+        const std::string& nonce)
+    {
+        const std::string relay_url =
+            gSavedPerAccountSettings.getString("BlazingStormRelayUrl");
+        if (relay_url.empty())
+        {
+            mLastStatus = "Relay request ignored because no trusted relay URL is configured.";
+            return false;
+        }
+
+        disconnect();
+        mRelayMode = true;
+        mRole = RemoteRole::Host;
+        mListening = true;
+        mExpectedBootstrapControllerId = controller_id;
+        mExpectedBootstrapControllerName = controller_name;
+        mExpectedBootstrapNonce = nonce;
+        mBootstrapDeadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+
+        if (!RelayTransport::instance().connect(
+                relay_url,
+                "{\"action\":\"create\",\"role\":\"subject\"}"))
+        {
+            mLastStatus = RelayTransport::instance().lastStartError();
+            disconnect();
+            return false;
+        }
+
+        mLastStatus = "Connecting to the configured Blazing Storm relay...";
+        return true;
+    }
+
+    bool LocalTransport::joinRelayController(
+        const std::string& session_id,
+        const std::string& controller_token)
+    {
+        const std::string relay_url =
+            gSavedPerAccountSettings.getString("BlazingStormRelayUrl");
+        if (relay_url.empty()) return false;
+
+        const std::string hello =
+            "{\"action\":\"join\",\"role\":\"controller\",\"sessionId\":\""
+            + jsonString(session_id)
+            + "\",\"token\":\""
+            + jsonString(controller_token)
+            + "\"}";
+
+        mRelayMode = true;
+        if (!RelayTransport::instance().connect(relay_url, hello))
+        {
+            mLastStatus = RelayTransport::instance().lastStartError();
+            return false;
+        }
+
+        mRelaySessionId = session_id;
+        mRelayControllerToken = controller_token;
+        mLastStatus = "Joining relay session...";
+        return true;
+    }
+
+    void LocalTransport::sendRelayInvite(
+        const std::string& session_id,
+        const std::string& controller_token)
+    {
+        LLUUID controller_uuid(mExpectedBootstrapControllerId);
+        if (controller_uuid.isNull()) return;
+
+        const LLUUID im_session_id =
+            LLIMMgr::computeSessionID(IM_NOTHING_SPECIAL, controller_uuid);
+        send_simple_im(
+            controller_uuid,
+            buildRelayInviteMessage(
+                gAgentID.asString(),
+                session_id,
+                controller_token,
+                mExpectedBootstrapNonce),
+            IM_NOTHING_SPECIAL,
+            im_session_id);
+    }
+
+    void LocalTransport::processRelayControl(const std::string& json)
+    {
+        std::string type;
+        if (!extractJsonString(json, "type", type)) return;
+
+        if (type == "created" && mRole == RemoteRole::Host && !mRelayRoomCreated)
+        {
+            std::string session_id;
+            std::string controller_token;
+            if (!extractJsonString(json, "sessionId", session_id)
+                || !extractJsonString(json, "controllerToken", controller_token)
+                || !validRelayTokenPart(session_id, 64)
+                || !validRelayTokenPart(controller_token, 128))
+            {
+                handlePeerDisconnect("Relay returned a malformed room invitation.");
+                return;
+            }
+
+            mRelayRoomCreated = true;
+            mRelaySessionId = session_id;
+            mRelayControllerToken = controller_token;
+            sendRelayInvite(session_id, controller_token);
+            mLastStatus = "Relay room created; invitation sent through Second Life IM.";
+            return;
+        }
+
+        if (type == "peer")
+        {
+            std::string state;
+            if (!extractJsonString(json, "state", state) || state != "connected") return;
+
+            mConnected = true;
+            mListening = false;
+            if (mRole == RemoteRole::Controller)
+            {
+                mBootstrapPending = false;
+                mLastStatus = "Relay peer connected; requesting possession approval.";
+                queueLine(
+                    "REQUEST|" + mBootstrapControllerId
+                    + "|" + hexEncode(mBootstrapControllerName)
+                    + "|" + mBootstrapNonce);
+                flushWrites();
+            }
+            else
+            {
+                mLastStatus = "Controller joined relay; waiting for the signed bootstrap request.";
+            }
+        }
+    }
+
+    void LocalTransport::updateRelay()
+    {
+        for (auto& event : RelayTransport::instance().takeEvents())
+        {
+            switch (event.type)
+            {
+                case RelayTransport::EventType::SocketConnected:
+                    break;
+                case RelayTransport::EventType::Message:
+                    if (!event.payload.empty() && event.payload.front() == '{')
+                        processRelayControl(event.payload);
+                    else if (!event.payload.empty())
+                        processLine(event.payload);
+                    break;
+                case RelayTransport::EventType::Closed:
+                    handlePeerDisconnect(event.payload.empty()
+                        ? "Relay connection closed." : event.payload);
+                    return;
+                case RelayTransport::EventType::Error:
+                    handlePeerDisconnect(event.payload.empty()
+                        ? "Relay connection failed." : event.payload);
+                    return;
+            }
+        }
+
+        if (mRelayMode
+            && mRole == RemoteRole::Host
+            && !mConnected
+            && std::chrono::steady_clock::now() >= mBootstrapDeadline)
+        {
+            handlePeerDisconnect("Relay bootstrap timed out.");
+        }
     }
 
     bool LocalTransport::startHost(std::uint16_t port)
@@ -249,18 +561,17 @@ namespace BlazingStorm
         disconnect();
 
         const std::string nonce = generateBootstrapNonce();
-        const std::string bootstrap_message =
-            buildBootstrapMessage(controller_id, nonce);
+        const bool relay = !gSavedPerAccountSettings.getString("BlazingStormRelayUrl").empty();
+        const std::string bootstrap_message = relay
+            ? buildRelayRequestMessage(controller_id, nonce)
+            : buildBootstrapMessage(controller_id, nonce);
         const LLUUID im_session_id =
             LLIMMgr::computeSessionID(IM_NOTHING_SPECIAL, subject_uuid);
 
-        send_simple_im(
-            subject_uuid,
-            bootstrap_message,
-            IM_NOTHING_SPECIAL,
-            im_session_id);
+        send_simple_im(subject_uuid, bootstrap_message, IM_NOTHING_SPECIAL, im_session_id);
 
         mRole = RemoteRole::Controller;
+        mRelayMode = relay;
         mBootstrapPending = true;
         mBootstrapSubjectId = subject_id;
         mBootstrapControllerId = controller_id;
@@ -269,10 +580,11 @@ namespace BlazingStorm
 
         const auto now = std::chrono::steady_clock::now();
         mNextBootstrapAttempt = now + std::chrono::milliseconds(250);
-        mBootstrapDeadline = now + std::chrono::seconds(15);
+        mBootstrapDeadline = now + (relay ? std::chrono::seconds(30) : std::chrono::seconds(15));
 
-        mLastStatus =
-            "Bootstrap IM sent through Second Life; waiting for the subject viewer to open its local listener.";
+        mLastStatus = relay
+            ? "Relay possession request sent through Second Life; waiting for the Subject's relay invitation."
+            : "Bootstrap IM sent through Second Life; waiting for the subject viewer to open its local listener.";
         return true;
     }
 
@@ -282,9 +594,29 @@ namespace BlazingStorm
         const std::string& message,
         bool online)
     {
-        if (!online
-            || gAgentID.isNull()
-            || mRole != RemoteRole::None
+        if (!online || gAgentID.isNull()) return false;
+
+        // Controller-side response to an outstanding relay request.
+        if (mRole == RemoteRole::Controller && mBootstrapPending && mRelayMode)
+        {
+            std::string subject_id, session_id, controller_token, nonce;
+            if (!parseRelayInviteMessage(
+                    message, subject_id, session_id, controller_token, nonce)
+                || from_id != mBootstrapSubjectId
+                || subject_id != mBootstrapSubjectId
+                || nonce != mBootstrapNonce)
+            {
+                return false;
+            }
+
+            if (!joinRelayController(session_id, controller_token))
+            {
+                return true;
+            }
+            return true;
+        }
+
+        if (mRole != RemoteRole::None
             || RemoteSession::instance().isActive()
             || RemoteController::instance().isActive())
         {
@@ -293,6 +625,15 @@ namespace BlazingStorm
 
         std::string embedded_controller_id;
         std::string nonce;
+
+        if (parseRelayRequestMessage(message, embedded_controller_id, nonce))
+        {
+            if (embedded_controller_id != from_id) return false;
+            LLUUID from_uuid(from_id);
+            if (from_uuid.isNull()) return false;
+            return startRelaySubject(from_id, from_name, nonce);
+        }
+
         if (!parseBootstrapMessage(message, embedded_controller_id, nonce)
             || embedded_controller_id != from_id)
         {
@@ -300,17 +641,12 @@ namespace BlazingStorm
         }
 
         LLUUID from_uuid(from_id);
-        if (from_uuid.isNull())
-        {
-            return false;
-        }
+        if (from_uuid.isNull()) return false;
 
-        if (!startHost(portForAvatarId(gAgentID.asString())))
-        {
-            return false;
-        }
+        if (!startHost(portForAvatarId(gAgentID.asString()))) return false;
 
         mExpectedBootstrapControllerId = from_id;
+        mExpectedBootstrapControllerName = from_name;
         mExpectedBootstrapNonce = nonce;
         mBootstrapDeadline =
             std::chrono::steady_clock::now() + std::chrono::seconds(15);
@@ -323,6 +659,11 @@ namespace BlazingStorm
 
     void LocalTransport::tryBootstrapConnect()
     {
+        if (mRelayMode)
+        {
+            return;
+        }
+
         if (mRole != RemoteRole::Controller
             || !mBootstrapPending
             || mConnected)
@@ -435,6 +776,7 @@ namespace BlazingStorm
         mPendingTrustedAutoAccept = false;
         mPaired = true;
         mExpectedBootstrapControllerId.clear();
+        mExpectedBootstrapControllerName.clear();
         mExpectedBootstrapNonce.clear();
         mLastStatus = "Controller accepted. Possession session is active.";
 
@@ -481,6 +823,10 @@ namespace BlazingStorm
             RemoteController::instance().end();
         }
 
+        if (mRelayMode)
+        {
+            RelayTransport::instance().disconnect();
+        }
         closeSocketOnly();
 
         if (mAcceptor)
@@ -500,6 +846,10 @@ namespace BlazingStorm
         mPendingControllerId.clear();
         mPendingControllerName.clear();
         mBootstrapPending = false;
+        mRelayMode = false;
+        mRelayRoomCreated = false;
+        mRelaySessionId.clear();
+        mRelayControllerToken.clear();
         mBootstrapSubjectId.clear();
         mBootstrapControllerId.clear();
         mBootstrapControllerName.clear();
@@ -531,6 +881,10 @@ namespace BlazingStorm
     void LocalTransport::resetConnectionState(bool keep_listener)
     {
         RemoteFeatures::instance().reset();
+        if (mRelayMode)
+        {
+            RelayTransport::instance().disconnect();
+        }
         closeSocketOnly();
         WorldInteraction::instance().reset();
 
@@ -566,7 +920,12 @@ namespace BlazingStorm
             mBootstrapControllerName.clear();
             mBootstrapNonce.clear();
             mExpectedBootstrapControllerId.clear();
+            mExpectedBootstrapControllerName.clear();
             mExpectedBootstrapNonce.clear();
+            mRelaySessionId.clear();
+            mRelayControllerToken.clear();
+            mRelayRoomCreated = false;
+            mRelayMode = false;
 
             if (mAcceptor)
             {
@@ -871,7 +1230,11 @@ namespace BlazingStorm
 
             if (fields[0] == "ACCEPT" && fields.size() == 2)
             {
-                RemoteController::instance().begin(fields[1], "local-subject");
+                RemoteController::instance().begin(
+                    fields[1],
+                    mRelayMode && !mBootstrapSubjectId.empty()
+                        ? mBootstrapSubjectId
+                        : "local-subject");
                 mPaired = true;
                 mLastStatus = "Subject accepted. Remote control session is active.";
                 FSCommon::report_to_nearby_chat("[Blazing Storm] Subject accepted the possession session.");
@@ -969,16 +1332,24 @@ namespace BlazingStorm
 
     void LocalTransport::queueLine(const std::string& line)
     {
-        if (!mSocket || !mConnected)
+        if (mRelayMode)
         {
+            if (mConnected && !RelayTransport::instance().sendText(line))
+            {
+                handlePeerDisconnect("Could not queue relay message.");
+            }
             return;
         }
+
+        if (!mSocket || !mConnected) return;
         mWriteBuffer += line;
         mWriteBuffer.push_back('\n');
     }
 
     void LocalTransport::flushWrites()
     {
+        if (mRelayMode) return;
+
         if (!mSocket || !mConnected)
         {
             return;
@@ -1007,7 +1378,14 @@ namespace BlazingStorm
 
     void LocalTransport::update()
     {
-        tryBootstrapConnect();
+        if (mRelayMode)
+        {
+            updateRelay();
+        }
+        else
+        {
+            tryBootstrapConnect();
+        }
 
         if (mRole == RemoteRole::Host
             && mListening
@@ -1021,9 +1399,12 @@ namespace BlazingStorm
             return;
         }
 
-        tryAccept();
-        flushWrites();
-        readAvailable();
+        if (!mRelayMode)
+        {
+            tryAccept();
+            flushWrites();
+            readAvailable();
+        }
 
         if (mRole == RemoteRole::Host && mPaired && mConnected)
         {
