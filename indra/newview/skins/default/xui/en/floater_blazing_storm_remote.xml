@@ -28,12 +28,33 @@
     Idle | disconnected | not paired
   </text>
 
+  <text
+   name="relay_url_label"
+   layout="topleft"
+   left="16"
+   top="70"
+   width="72"
+   height="18">
+    Relay URL:
+  </text>
+
+  <line_editor
+   name="relay_url"
+   layout="topleft"
+   left="88"
+   right="-16"
+   top="65"
+   height="26"
+   follows="left|top|right"
+   max_length_chars="512"
+   tool_tip="Trusted wss:// relay endpoint. Both viewers should configure the same relay. Leave blank for local loopback debug mode." />
+
   <tab_container
    name="remote_tabs"
    layout="topleft"
    left="10"
    right="-10"
-   top="70"
+   top="104"
    bottom="-10"
    follows="all"
    tab_position="top">
