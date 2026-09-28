@@ -1,11 +1,10 @@
 /**
  * @file bslocaltransport.h
- * @brief Loopback-only transport for testing two Blazing Storm viewers.
+ * @brief Blazing Storm possession protocol with local and relay backends.
  *
- * This transport binds exclusively to 127.0.0.1. It is intentionally not
- * suitable for LAN or Internet use because this first test protocol is not
- * encrypted. A future relay/TLS transport can implement the same higher-level
- * command model without exposing Second Life credentials.
+ * Local mode remains loopback-only for debugging. Internet mode uses the
+ * outbound WSS RelayTransport while keeping all Subject-side permission and
+ * command validation in this class.
  */
 
 #ifndef BS_LOCAL_TRANSPORT_H
@@ -69,6 +68,7 @@ namespace BlazingStorm
         const std::string& pendingControllerName() const { return mPendingControllerName; }
         const std::string& lastStatus() const { return mLastStatus; }
         std::uint16_t port() const { return mPort; }
+        bool usingRelay() const { return mRelayMode; }
 
     private:
         using tcp = boost::asio::ip::tcp;
@@ -82,6 +82,29 @@ namespace BlazingStorm
         bool parseBootstrapMessage(const std::string& message,
                                    std::string& controller_id,
                                    std::string& nonce) const;
+        std::string buildRelayRequestMessage(const std::string& controller_id,
+                                             const std::string& nonce) const;
+        std::string buildRelayInviteMessage(const std::string& subject_id,
+                                            const std::string& session_id,
+                                            const std::string& controller_token,
+                                            const std::string& nonce) const;
+        bool parseRelayRequestMessage(const std::string& message,
+                                      std::string& controller_id,
+                                      std::string& nonce) const;
+        bool parseRelayInviteMessage(const std::string& message,
+                                     std::string& subject_id,
+                                     std::string& session_id,
+                                     std::string& controller_token,
+                                     std::string& nonce) const;
+        bool startRelaySubject(const std::string& controller_id,
+                               const std::string& controller_name,
+                               const std::string& nonce);
+        bool joinRelayController(const std::string& session_id,
+                                 const std::string& controller_token);
+        void updateRelay();
+        void processRelayControl(const std::string& json);
+        void sendRelayInvite(const std::string& session_id,
+                             const std::string& controller_token);
         void tryBootstrapConnect();
         void announcePossessionAccepted(bool trusted_auto_accept);
         void showPairingPrompt();
@@ -111,6 +134,8 @@ namespace BlazingStorm
         bool mPendingPairing = false;
         bool mPendingTrustedAutoAccept = false;
         bool mBootstrapPending = false;
+        bool mRelayMode = false;
+        bool mRelayRoomCreated = false;
 
         std::uint16_t mPort = DEFAULT_PORT;
         std::string mPairingCode;
@@ -122,7 +147,10 @@ namespace BlazingStorm
         std::string mBootstrapControllerName;
         std::string mBootstrapNonce;
         std::string mExpectedBootstrapControllerId;
+        std::string mExpectedBootstrapControllerName;
         std::string mExpectedBootstrapNonce;
+        std::string mRelaySessionId;
+        std::string mRelayControllerToken;
         std::chrono::steady_clock::time_point mBootstrapDeadline{};
         std::chrono::steady_clock::time_point mNextBootstrapAttempt{};
 
