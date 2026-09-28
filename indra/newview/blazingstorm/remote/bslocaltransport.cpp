@@ -29,6 +29,7 @@
 #include <boost/asio/error.hpp>
 #include <boost/asio/write.hpp>
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cctype>
@@ -439,10 +440,19 @@ namespace BlazingStorm
                 case RelayTransport::EventType::SocketConnected:
                     break;
                 case RelayTransport::EventType::Message:
-                    if (!event.payload.empty() && event.payload.front() == '{')
+                    // Relay control frames are only meaningful before the two
+                    // peers are joined. Once connected, every payload is peer
+                    // application data so a peer cannot spoof relay control.
+                    if (!mConnected
+                        && !event.payload.empty()
+                        && event.payload.front() == '{')
+                    {
                         processRelayControl(event.payload);
+                    }
                     else if (!event.payload.empty())
+                    {
                         processLine(event.payload);
+                    }
                     break;
                 case RelayTransport::EventType::Closed:
                     handlePeerDisconnect(event.payload.empty()
@@ -456,11 +466,13 @@ namespace BlazingStorm
         }
 
         if (mRelayMode
-            && mRole == RemoteRole::Host
             && !mConnected
             && std::chrono::steady_clock::now() >= mBootstrapDeadline)
         {
-            handlePeerDisconnect("Relay bootstrap timed out.");
+            handlePeerDisconnect(
+                mRole == RemoteRole::Controller
+                    ? "Relay invitation/join timed out."
+                    : "Relay bootstrap timed out.");
         }
     }
 
@@ -1387,7 +1399,8 @@ namespace BlazingStorm
             tryBootstrapConnect();
         }
 
-        if (mRole == RemoteRole::Host
+        if (!mRelayMode
+            && mRole == RemoteRole::Host
             && mListening
             && !mConnected
             && !mExpectedBootstrapControllerId.empty()
