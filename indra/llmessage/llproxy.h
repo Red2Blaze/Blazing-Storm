@@ -106,14 +106,13 @@ struct socks_command_request_t {
     U16     port;
 };
 
-// Standard SOCKS 5 reply packet
+// SOCKS 5 command reply prefix. BND.ADDR and BND.PORT are variable-length
+// and are read separately based on ATYP (RFC 1928).
 struct socks_command_response_t {
     U8      version;
     U8      reply;
     U8      reserved;
     U8      atype;
-    U8      add_bytes[4];
-    U16     port;
 };
 
 #define AUTH_NOT_ACCEPTABLE 0xFF // reply if preferred methods are not available
