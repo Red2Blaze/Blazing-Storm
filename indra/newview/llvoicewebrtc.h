@@ -79,14 +79,25 @@ public:
 
     static bool isShuttingDown() { return sShuttingDown; }
 
+    // True once llwebrtc::terminate() has been entered.  Between
+    // isShuttingDown() and this, the webrtc library is still fully alive and
+    // connections must still release their peer connections normally --  see
+    // drainConnections() and ~LLVoiceWebRTCConnection().
+    static bool isWebRTCTerminated() { return sWebRTCTerminated; }
+
     const LLVoiceVersionInfo& getVersion() override;
+    void                      updateVersion();
 
     void updateSettings() override; // call after loading settings and whenever they change
 
     // Returns true if WebRTC has successfully logged in and is not in error state
     bool isVoiceWorking() const override;
 
+// <FS:TJ> Keep Vivox only for OpenSim viewers
+#ifdef OPENSIM
     std::string sipURIFromID(const LLUUID &id) const override;
+#endif
+// </FS:TJ>
     LLSD getP2PChannelInfoTemplate(const LLUUID& id) const override;
 
     void setHidden(bool hidden) override;  // virtual
@@ -287,6 +298,7 @@ public:
 
         void shutdownAllConnections();
         void revive();
+        const std::string getVersion() const;
 
         static void processSessionStates();
 
@@ -306,6 +318,9 @@ public:
         static void clearSessions();
 
         bool isEmpty() { return mWebRTCConnections.empty(); }
+
+        bool allConnectionsClosed() const;
+        static bool allSessionsClosed();
 
         virtual bool isSpatial() = 0;
         virtual bool isEstate()  = 0;
@@ -456,6 +471,10 @@ private:
     /// Clean up objects created during a voice session.
     void cleanUp();
 
+    /// Close the live peer connections before handing off to
+    /// llwebrtc::terminate().  Bounded and best effort.
+    void drainConnections();
+
     LL::WorkQueue::weak_t mMainQueue;
 
     F32 mTuningMicGain;
@@ -540,8 +559,11 @@ private:
 
     // These variables can last longer than WebRTC in coroutines so we need them as static
     static bool sShuttingDown;
+    static bool sWebRTCTerminated;
 
     LLEventMailDrop mWebRTCPump;
+
+    LLSD mLastWebRTCStats;
 };
 
 
@@ -605,12 +627,15 @@ class LLVoiceWebRTCConnection :
     //@{
     void OnDataReceived(const std::string &data, bool binary) override;
     void OnDataChannelReady(llwebrtc::LLWebRTCDataInterface *data_interface) override;
+
+    void OnStatsDelivered(const llwebrtc::LLWebRTCStatsMap& stats_data) override;
     //@}
 
     void OnDataReceivedImpl(const std::string &data, bool binary);
 
     void sendJoin();
     void sendData(const std::string &data);
+    const std::string& getVersion();
 
     void processIceUpdates();
 
@@ -625,6 +650,7 @@ class LLVoiceWebRTCConnection :
     bool connectionStateMachine();
 
     virtual bool isSpatial() { return false; }
+    bool         isPrimary() const { return mPrimary; }
 
     LLUUID getRegionID() { return mRegionID; }
 
@@ -638,7 +664,15 @@ class LLVoiceWebRTCConnection :
         return mShutDown;
     }
 
+    // True once the webrtc peer connection has finished closing.  The
+    // connection object can outlive this while it waits for outstanding
+    // requests to unwind, so this -- not reaping -- is what drainConnections()
+    // waits on.
+    bool isClosed() const { return mVoiceConnectionState == VOICE_STATE_CLOSED; }
+
     void OnVoiceConnectionRequestSuccess(const LLSD &body);
+
+    void resetConnectionStats();
 
   protected:
     typedef enum e_voice_connection_state
@@ -696,6 +730,7 @@ class LLVoiceWebRTCConnection :
     bool   mPrimary;
     LLUUID mViewerSession;
     std::string mChannelID;
+    std::string mServerVersion;
 
     std::string mChannelSDP;
     std::string mRemoteChannelSDP;

@@ -55,6 +55,7 @@
 
 #include "llweb.h"
 
+#include "llnotificationsutil.h" // <FS:TJ/> Detect and notify if the viewer is trying to run as admin on Windows
 #include "llviewernetwork.h"
 #include "llmd5.h"
 #include "llfindlocale.h"
@@ -84,6 +85,7 @@
 #include "BugSplat.h"
 #include "boost/json.hpp"                 // Boost.Json
 #include "llagent.h"                // for agent location
+#include "llmemory.h"
 #include "llstartup.h"
 #include "llviewerregion.h"
 #include "llvoavatarself.h"         // for agent name
@@ -129,6 +131,7 @@ namespace
     // MiniDmpSender pointer. As things stand, though, we must define an
     // actual function and store the pointer statically.
     static MiniDmpSender *sBugSplatSender = nullptr;
+    static std::string sBugsplatDescriptionField;
 
     bool bugsplatSendLog(UINT nCode, LPVOID lpVal1, LPVOID lpVal2)
     {
@@ -202,7 +205,21 @@ namespace
 
             // LL_ERRS message, when there is one
             // <FS:Beq> Improve bugsplpat reporting with attributes
-           // sBugSplatSender->setDefaultUserDescription(WCSTR(LLError::getFatalMessage()));
+            //if (!sBugsplatDesriptionField.empty())
+            //{
+            //    // Can be set by watchdog or other code that detects a problem
+            //    // and wants to add some context to the crash report.
+            //    // Will be visible in the BugSplat web UI.
+            //    sBugSplatSender->setDefaultUserDescription(WCSTR(sBugsplatDescriptionField));
+            //    // This type of crash is not nessesarily a crash, or final.
+            //    // Prepare for the next one.
+            //    sBugsplatDesriptionField.clear();
+            //}
+            //else
+            //{
+            //    // LL_ERRS message, when there is one
+            //    sBugSplatSender->setDefaultUserDescription(WCSTR(LLError::getFatalMessage()));
+            //}
             // sBugSplatSender->setAttribute(WCSTR(L"OS"), WCSTR(LLOSInfo::instance().getOSStringSimple())); // In case we ever stop using email for this
             // sBugSplatSender->setAttribute(WCSTR(L"AppState"), WCSTR(LLStartUp::getStartupStateString()));
             // sBugSplatSender->setAttribute(WCSTR(L"GLVendor"), WCSTR(gGLManager.mGLVendor));
@@ -219,6 +236,16 @@ namespace
             BugSplatAttributes::instance().setAttribute("AppState", LLStartUp::getStartupStateString());
             // Location
             // </FS:Beq>
+            const U32 avail_kb = LLMemory::getAvailableMemKB().value();
+            if (avail_kb != U32_MAX) // filter out initial values, if one is not set, all are not set
+            {
+                // Memory usage at crash time (can be 1s obsolete)
+                sBugSplatSender->setAttribute(WCSTR(L"MemAllocatedKB"), WCSTR(std::to_string(LLMemory::getAllocatedMemKB().value())));
+                sBugSplatSender->setAttribute(WCSTR(L"MemAvailableKB"), WCSTR(std::to_string(LLMemory::getAvailableMemKB().value())));
+                sBugSplatSender->setAttribute(WCSTR(L"MemMaxPhysicalKB"), WCSTR(std::to_string(LLMemory::getMaxMemKB().value())));
+                sBugSplatSender->setAttribute(WCSTR(L"MemAvailCommitMB"), WCSTR(std::to_string(LLMemory::getAvailableCommitMemMB().value())));
+            }
+
             if (gAgent.getRegion())
             {
                 // region location, when we have it
@@ -245,6 +272,7 @@ namespace
             // </FS:Beq>
 
             LLAppViewer* app = LLAppViewer::instance();
+
             if (!app->isSecondInstance() && !app->errorMarkerExists())
             {
                 // If marker doesn't exist, create a marker with 'other' or 'logout' code for next launch
@@ -499,22 +527,8 @@ int APIENTRY WINMAIN(HINSTANCE hInstance,
     // commands and exit the process before we do anything else.
     if (!velopack_initialize())
     {
+        // Obsolete? Always return true
         // Velopack handled the invocation (install/uninstall hook)
-
-        // Drop install related settings
-        gDirUtilp->initAppDirs("SecondLife");
-
-        std::string user_settings_path = gDirUtilp->getExpandedFilename(LL_PATH_USER_SETTINGS, "settings.xml");
-        LLControlGroup settings("global");
-        if (settings.loadFromFile(user_settings_path))
-        {
-            // If user reinstalls or updates, we want to recheck for nsis leftovers.
-            if (settings.controlExists("PreviousInstallChecked"))
-            {
-                settings.setBOOL("PreviousInstallChecked", false);
-            }
-            settings.saveToFile(user_settings_path, true);
-        }
         return 0;
     }
 #endif
@@ -1059,6 +1073,11 @@ bool LLAppViewerWin32::init()
     if( !success )
         success = LLAppViewer::init();
 
+    // <FS:TJ> Detect and notify if the viewer is trying to run as admin on Windows
+    if (success)
+        detectRunningAsAdmin();
+    // </FS:TJ>
+
     return success;
 }
 
@@ -1088,6 +1107,38 @@ bool LLAppViewerWin32::reportCrashToBugsplat(void* pExcepInfo)
     if (sBugSplatSender)
     {
         sBugSplatSender->createReport((EXCEPTION_POINTERS*)pExcepInfo);
+        return true;
+    }
+#endif // LL_BUGSPLAT
+    return false;
+}
+
+#if defined(LL_BUGSPLAT)
+static int reportCustomToBugsplatFilter(EXCEPTION_POINTERS* pExcepInfo)
+{
+    if (sBugSplatSender)
+    {
+        sBugSplatSender->createReport(pExcepInfo);
+    }
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
+bool LLAppViewerWin32::reportCustomToBugsplat(const std::string &description)
+{
+#if defined(LL_BUGSPLAT)
+    if (sBugSplatSender)
+    {
+        sBugsplatDescriptionField = description;
+
+        __try
+        {
+            // Generate a custom exception code
+            RaiseException(0xE0000001, 0, 0, NULL);
+        }
+        __except (reportCustomToBugsplatFilter(GetExceptionInformation()))
+        {
+        }
         return true;
     }
 #endif // LL_BUGSPLAT
@@ -1371,3 +1422,33 @@ void LLAppViewerWin32::startCachePurge()
         SetThreadPriority( hThread, THREAD_MODE_BACKGROUND_BEGIN );
 }
 // </FS:ND>
+
+// <FS:TJ> Detect and notify if the viewer is trying to run as admin on Windows
+void LLAppViewerWin32::detectRunningAsAdmin()
+{
+    bool elevated = false;
+    HANDLE elevation_token = nullptr;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &elevation_token))
+    {
+        DWORD size = 0;
+        TOKEN_ELEVATION elevation{};
+
+        if (GetTokenInformation(elevation_token, TokenElevation, &elevation, sizeof(elevation), &size))
+            elevated = (elevation.TokenIsElevated != 0);
+
+        CloseHandle(elevation_token);
+    }
+    else
+    {
+        LL_WARNS() << "Couldn't open the access token for the current process: " << GetLastError() << LL_ENDL;
+    }
+
+    // There is no need to check the child processes (slplugin.exe and dullahan_host.exe)
+    // as they will fail to run if ran as admin when the viewer isn't, and therefore can't be checked
+    if (elevated)
+    {
+        LL_WARNS() << "A viewer process is running with administrator privileges which will cause problems." << LL_ENDL;
+        LLNotificationsUtil::add("ViewerProcessRunningAsAdmin");
+    }
+}
+// </FS:TJ>

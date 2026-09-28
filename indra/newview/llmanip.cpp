@@ -459,9 +459,16 @@ void LLManip::renderGuidelines(bool draw_x, bool draw_y, bool draw_z)
         gGL.getTexUnit(0)->unbind(LLTexUnit::TT_TEXTURE);
         LLUI::setLineWidth(1.5f);
 
+        // <FS:AR> [FIRE-36909] Build Tools - Provide Accessibility(Color Config)
+        LLColor4 color;
+        // </FS:AR> [FIRE-36909]
         if (draw_x)
         {
-            gGL.color4f(1.f, 0.f, 0.f, LINE_ALPHA);
+            // <FS:AR> [FIRE-36909] Build Tools - Provide Accessibility(Color Config)
+            //gGL.color4f(1.f, 0.f, 0.f, LINE_ALPHA);
+            color.setVec(getUserEditColor(VX, LINE_ALPHA));
+            gGL.color4f(color.mV[VX], color.mV[VY], color.mV[VZ], color.mV[VW]);
+            // </FS:AR> [FIRE-36909]
             gGL.begin(LLRender::LINES);
             gGL.vertex3f( -region_size, 0.f, 0.f );
             gGL.vertex3f(  region_size, 0.f, 0.f );
@@ -470,7 +477,11 @@ void LLManip::renderGuidelines(bool draw_x, bool draw_y, bool draw_z)
 
         if (draw_y)
         {
-            gGL.color4f(0.f, 1.f, 0.f, LINE_ALPHA);
+            // <FS:AR> [FIRE-36909] Build Tools - Provide Accessibility(Color Config)
+            //gGL.color4f(0.f, 1.f, 0.f, LINE_ALPHA);
+            color.setVec(getUserEditColor(VY, LINE_ALPHA));
+            gGL.color4f(color.mV[VX], color.mV[VY], color.mV[VZ], color.mV[VW]);
+            // </FS:AR> [FIRE-36909]
             gGL.begin(LLRender::LINES);
             gGL.vertex3f( 0.f, -region_size, 0.f );
             gGL.vertex3f( 0.f,  region_size, 0.f );
@@ -479,7 +490,11 @@ void LLManip::renderGuidelines(bool draw_x, bool draw_y, bool draw_z)
 
         if (draw_z)
         {
-            gGL.color4f(0.f, 0.f, 1.f, LINE_ALPHA);
+            // <FS:AR> [FIRE-36909] Build Tools - Provide Accessibility(Color Config)
+            //gGL.color4f(0.f, 0.f, 1.f, LINE_ALPHA);
+            color.setVec(getUserEditColor(VZ, LINE_ALPHA));
+            gGL.color4f(color.mV[VX], color.mV[VY], color.mV[VZ], color.mV[VW]);
+            // </FS:AR> [FIRE-36909]
             gGL.begin(LLRender::LINES);
             gGL.vertex3f( 0.f, 0.f, -region_size );
             gGL.vertex3f( 0.f, 0.f,  region_size );
@@ -504,14 +519,26 @@ void LLManip::renderXYZ(const LLVector3 &vec)
         LLUIImagePtr imagep = LLUI::getUIImage("Rounded_Square");
         gViewerWindow->setup2DRender();
         const LLVector2& display_scale = gViewerWindow->getDisplayScale();
-        gGL.color4f(0.f, 0.f, 0.f, 0.7f);
+        // <FS:AR> [FIRE-36909] Build Tools - Provide Accessibility(Color Config)
+        LLColor4 backgroudColor = getUserEditColor(VALPHA, 0.7f);
+
+        //gGL.color4f(0.f, 0.f, 0.f, 0.7f);
+        gGL.color4f(backgroudColor.mV[VX], backgroudColor.mV[VY], backgroudColor.mV[VZ], backgroudColor.mV[VALPHA]);
+
+        //imagep->draw(
+        //    (S32)((window_center_x - 115) * display_scale.mV[VX]),
+        //    (S32)((window_center_y + vertical_offset - PAD) * display_scale.mV[VY]),
+        //    (S32)(235 * display_scale.mV[VX]),
+        //    (S32)((PAD * 2 + 10) * display_scale.mV[VY]),
+        //    LLColor4(0.f, 0.f, 0.f, 0.7f) );
 
         imagep->draw(
             (S32)((window_center_x - 115) * display_scale.mV[VX]),
             (S32)((window_center_y + vertical_offset - PAD) * display_scale.mV[VY]),
             (S32)(235 * display_scale.mV[VX]),
             (S32)((PAD * 2 + 10) * display_scale.mV[VY]),
-            LLColor4(0.f, 0.f, 0.f, 0.7f) );
+            backgroudColor);
+        // </FS:AR> [FIRE-36909]
         LLFontGL* font = LLFontGL::getFontSansSerif();
         LLLocale locale(LLLocale::USER_LOCALE);
         LLGLDepthTest gls_depth(GL_FALSE);
@@ -722,3 +749,49 @@ LLColor4 LLManip::setupSnapGuideRenderPass(S32 pass)
 
     return line_color;
 }
+
+// <FS:AR> [FIRE-36909] Build Tools - Provide Accessibility(Color Config)
+LLColor4 LLManip::getUserEditColor(U32 axis, F32 alpha)
+{
+    static const auto sXAxisColor              = LLUIColorTable::instance().getColor("BuildToolsXAxisColor");
+    static const auto sYAxisColor              = LLUIColorTable::instance().getColor("BuildToolsYAxisColor");
+    static const auto sZAxisColor              = LLUIColorTable::instance().getColor("BuildToolsZAxisColor");
+    static const auto sTextRectBackgroundColor = LLUIColorTable::instance().getColor("BuildToolsTextBackgroundColor");
+
+    LLColor4 color;
+    switch (axis)
+    {
+        case VX:
+            color.setVec(sXAxisColor);
+            break;
+        case VY:
+            color.setVec(sYAxisColor);
+            break;
+        case VZ:
+            color.setVec(sZAxisColor);
+            break;
+        case VALPHA:
+            color.setVec(sTextRectBackgroundColor);
+            break;
+
+        default:
+            break;
+    }
+
+    color.mV[VALPHA] *= alpha;
+
+    return color;
+}
+
+F32 LLManip::getUserEditHandleScaling()
+{
+    static LLCachedControl<F32> userScaling(gSavedSettings, "FSBuildPrefs_EditHandleScaling");
+    return userScaling;
+}
+
+bool LLManip::getUserEditHintTextShadow()
+{
+    static LLCachedControl<bool> textShadowing(gSavedSettings, "FSBuildPrefs_EditTextShadowing");
+    return textShadowing;
+}
+// </FS:AR> [FIRE-36909]
