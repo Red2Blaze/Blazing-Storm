@@ -867,6 +867,7 @@ namespace BlazingStorm
         mBootstrapControllerName.clear();
         mBootstrapNonce.clear();
         mExpectedBootstrapControllerId.clear();
+        mExpectedBootstrapControllerName.clear();
         mExpectedBootstrapNonce.clear();
         mReceiveBuffer.clear();
         mWriteBuffer.clear();
