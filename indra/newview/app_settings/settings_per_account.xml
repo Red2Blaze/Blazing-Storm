@@ -1550,6 +1550,17 @@
             <key>Value</key>
             <map/>
         </map>
+        <key>BlazingStormRelayUrl</key>
+    <map>
+      <key>Comment</key>
+      <string>Trusted WSS endpoint for Blazing Storm Internet relay sessions. Leave blank to use the loopback-only debug transport.</string>
+      <key>Persist</key>
+      <integer>1</integer>
+      <key>Type</key>
+      <string>String</string>
+      <key>Value</key>
+      <string></string>
+    </map>
         <key>BlazingStormPossessionAcceptedMessage</key>
     <map>
       <key>Comment</key>
