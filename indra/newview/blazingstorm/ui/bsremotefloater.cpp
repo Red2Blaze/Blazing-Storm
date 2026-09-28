@@ -40,6 +40,7 @@
 #include <iomanip>
 
 #include <utility>
+#include <cctype>
 
 namespace
 {
@@ -68,6 +69,19 @@ namespace BlazingStorm
 
     bool RemoteFloater::postBuild()
     {
+        auto* relay_url = getChild<LLLineEditor>("relay_url");
+        relay_url->setText(gSavedPerAccountSettings.getString("BlazingStormRelayUrl"));
+        relay_url->setCommitCallback(
+            [](LLUICtrl* ctrl, const LLSD&)
+            {
+                std::string value = ctrl->getValue().asString();
+                while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
+                    value.erase(value.begin());
+                while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
+                    value.pop_back();
+                gSavedPerAccountSettings.setString("BlazingStormRelayUrl", value);
+            });
+
         setupFeatures();
         getChild<LLCheckBoxCtrl>("allow_full_control")->setCommitCallback(
             [this](LLUICtrl* ctrl, const LLSD&)
