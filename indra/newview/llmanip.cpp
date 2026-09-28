@@ -589,11 +589,6 @@ void LLManip::renderXYZ(const LLVector3 &vec)
             current_vec = vec;
         }
 
-        // <FS:AR> [FIRE-36909] Build Tools - text shadowing
-        if (getUserEditHintTextShadow())
-        {
-        // </FS:AR> [FIRE-36909] text shadowing
-
         font->render(feedback_stringX, 0, window_center_x - 102.f + 1.f, (F32)(window_center_y + vertical_offset) - 2.f, LLColor4::black,
             LLFontGL::LEFT, LLFontGL::BASELINE,
             LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, &right_x);
@@ -606,35 +601,17 @@ void LLManip::renderXYZ(const LLVector3 &vec)
             LLFontGL::LEFT, LLFontGL::BASELINE,
             LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, &right_x);
 
-        // <FS:AR> [FIRE-36909] Build Tools - text shadowing
-        }
-        // </FS:AR> [FIRE-36909] text shadowing
-
-        // <FS:AR> [FIRE-36909] Build Tools - Provide Accessibility(Color Config)
-        //font->render(feedback_stringX, 0, window_center_x - 102.f, (F32)(window_center_y + vertical_offset), LLColor4(1.f, 0.5f, 0.5f, 1.f),
-        //    LLFontGL::LEFT, LLFontGL::BASELINE,
-        //    LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, &right_x);
-
-        //font->render(feedback_stringY, 0, window_center_x - 27.f, (F32)(window_center_y + vertical_offset), LLColor4(0.5f, 1.f, 0.5f, 1.f),
-        //    LLFontGL::LEFT, LLFontGL::BASELINE,
-        //    LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, &right_x);
-
-        //font->render(feedback_stringZ, 0, window_center_x + 48.f, (F32)(window_center_y + vertical_offset), LLColor4(0.5f, 0.5f, 1.f, 1.f),
-        //    LLFontGL::LEFT, LLFontGL::BASELINE,
-        //    LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, &right_x);
-
-        font->render(feedback_stringX, 0, window_center_x - 102.f, (F32)(window_center_y + vertical_offset), getUserEditColor(VX),
+        font->render(feedback_stringX, 0, window_center_x - 102.f, (F32)(window_center_y + vertical_offset), LLColor4(1.f, 0.5f, 0.5f, 1.f),
             LLFontGL::LEFT, LLFontGL::BASELINE,
             LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, &right_x);
 
-        font->render(feedback_stringY, 0, window_center_x - 27.f, (F32)(window_center_y + vertical_offset), getUserEditColor(VY),
+        font->render(feedback_stringY, 0, window_center_x - 27.f, (F32)(window_center_y + vertical_offset), LLColor4(0.5f, 1.f, 0.5f, 1.f),
             LLFontGL::LEFT, LLFontGL::BASELINE,
             LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, &right_x);
 
-        font->render(feedback_stringZ, 0, window_center_x + 48.f, (F32)(window_center_y + vertical_offset), getUserEditColor(VZ),
+        font->render(feedback_stringZ, 0, window_center_x + 48.f, (F32)(window_center_y + vertical_offset), LLColor4(0.5f, 0.5f, 1.f, 1.f),
             LLFontGL::LEFT, LLFontGL::BASELINE,
             LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, &right_x);
-        // </FS:AR> [FIRE-36909]
         // </FS:Ansariel>
     }
     gGL.popMatrix();

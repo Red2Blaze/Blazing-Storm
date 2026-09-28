@@ -30,6 +30,7 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "fsfloaterim.h"
+#include "blazingstorm/remote/bsrequestactions.h" // <BlazingStorm>
 
 #include "fschathistory.h"
 #include "fschatoptionsmenu.h"
@@ -898,6 +899,18 @@ bool FSFloaterIM::postBuild()
     // support sysinfo button -Zi
     mSysinfoButton = getChild<LLButton>("send_sysinfo_btn");
     onSysinfoButtonVisibilityChanged(false);
+    LLLayoutPanel* blazing_request_panel =
+        getChild<LLLayoutPanel>("blazing_storm_request_btn_panel");
+    LLButton* blazing_request_button =
+        getChild<LLButton>("blazing_storm_request_btn");
+
+    blazing_request_panel->setVisible(false);
+    blazing_request_button->setVisible(false);
+    blazing_request_button->setClickedCallback(
+        [this](LLUICtrl*, const LLSD&)
+        {
+            BlazingStorm::RequestActions::requestPossession(mOtherParticipantUUID);
+        });
 
     // type-specfic controls
     LLIMModel::LLIMSession* pIMSession = LLIMModel::instance().findIMSession(mSessionID);
@@ -912,6 +925,9 @@ bool FSFloaterIM::postBuild()
                 getChild<LLLayoutPanel>("gprofile_panel")->setVisible(false);
                 getChild<LLLayoutPanel>("end_call_btn_panel")->setVisible(false);
                 getChild<LLLayoutPanel>("voice_ctrls_btn_panel")->setVisible(false);
+                const bool show_blazing_request = mOtherParticipantUUID.notNull();
+                blazing_request_panel->setVisible(show_blazing_request);
+                blazing_request_button->setVisible(show_blazing_request);
 
                 LL_DEBUGS("FSFloaterIM") << "adding FSFloaterIM removing/adding particularfriendobserver" << LL_ENDL;
                 LLAvatarTracker::instance().removeParticularFriendObserver(mOtherParticipantUUID, this);

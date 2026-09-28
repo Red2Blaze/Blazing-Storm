@@ -32,6 +32,11 @@
 #endif
 
 #include "llviewermenu.h"
+#include "blazingstorm/remote/bsrequestactions.h" // <BlazingStorm>
+#include "blazingstorm/remote/bsremotesession.h" // <BlazingStorm>
+#include "blazingstorm/remote/bsworldinteraction.h" // <BlazingStorm>
+#include "blazingstorm/remote/bslocaltransport.h" // <BlazingStorm>
+#include "blazingstorm/remote/bsremotecontroller.h" // <BlazingStorm>
 
 // linden library includes
 #include "llavatarnamecache.h"  // IDEVO (I Are Not Men!)
@@ -9800,6 +9805,25 @@ class LLAttachmentPointFilled : public view_listener_t
     }
 };
 
+class BSAvatarRequestPossession : public view_listener_t
+{
+    bool handleEvent(const LLSD& userdata) override
+    {
+        LLVOAvatar* avatar =
+            find_avatar_from_object(
+                LLSelectMgr::getInstance()->getSelection()->getPrimaryObject());
+
+        if (avatar
+            && RlvActions::canShowName(
+                RlvActions::SNC_DEFAULT,
+                avatar->getID()))
+        {
+            BlazingStorm::RequestActions::requestPossession(avatar->getID());
+        }
+        return true;
+    }
+};
+
 class LLAvatarSendIM : public view_listener_t
 {
     bool handleEvent(const LLSD& userdata)
@@ -12828,7 +12852,15 @@ void initialize_menus()
     commit.add("OpenGridStatus", boost::bind(&openGridStatus)); // <FS:Ansariel> FIRE-21236 - Help Menu - Check Grid Status doesn't open using External Browser
 
     // Agent
-    commit.add("Agent.toggleFlying", boost::bind(&LLAgent::toggleFlying));
+    commit.add("Agent.toggleFlying",
+        [](LLUICtrl*, const LLSD&)
+        {
+            if (!BlazingStorm::RemoteSession::instance().isSubjectRestricted(
+                    BlazingStorm::SubjectRestriction::Movement))
+            {
+                LLAgent::toggleFlying();
+            }
+        });
     enable.add("Agent.enableFlyLand", boost::bind(&enable_fly_land));
     enable.add("Agent.enableFlying", boost::bind(&LLAgent::enableFlying)); // <FS:Ansariel> Keep this
     commit.add("Agent.PressMicrophone", boost::bind(&LLAgent::pressMicrophone, _2));
@@ -13279,6 +13311,7 @@ void initialize_menus()
     commit.add("Avatar.Eject", boost::bind(&handle_avatar_eject, LLSD()));
     commit.add("Avatar.ShowInspector", boost::bind(&handle_avatar_show_inspector));
     view_listener_t::addMenu(new LLAvatarSendIM(), "Avatar.SendIM");
+    view_listener_t::addMenu(new BSAvatarRequestPossession(), "Avatar.BlazingStormRequestPossession"); // <BlazingStorm>
     view_listener_t::addMenu(new LLAvatarCall(), "Avatar.Call");
 //  enable.add("Avatar.EnableCall", boost::bind(&LLAvatarActions::canCall));
 // [RLVa:KB] - Checked: 2010-08-25 (RLVa-1.2.1b) | Added: RLVa-1.2.1b
@@ -13325,6 +13358,28 @@ void initialize_menus()
     // Object pie menu
     view_listener_t::addMenu(new LLObjectBuild(), "Object.Build");
     commit.add("Object.Touch", boost::bind(&handle_object_touch));
+    commit.add("BlazingStorm.ObjectTouchSubject",
+        [](LLUICtrl*, const LLSD&)
+        {
+            BlazingStorm::WorldInteraction::instance().requestTouchFromCurrentPick();
+        });
+    commit.add("BlazingStorm.ObjectSitSubject",
+        [](LLUICtrl*, const LLSD&)
+        {
+            BlazingStorm::WorldInteraction::instance().requestSitFromCurrentPick();
+        });
+    commit.add("BlazingStorm.StandSubject",
+        [](LLUICtrl*, const LLSD&)
+        {
+            BlazingStorm::WorldInteraction::instance().requestStand();
+        });
+    enable.add("BlazingStorm.ControllerActive",
+        [](LLUICtrl*, const LLSD&) -> bool
+        {
+            return BlazingStorm::RemoteController::instance().isActive()
+                && BlazingStorm::LocalTransport::instance().isPaired();
+        });
+
     commit.add("Object.ShowOriginal", boost::bind(&handle_object_show_original));
     commit.add("Object.SetFavorite", boost::bind(&handle_object_set_favorite, _2));
     commit.add("Object.SitOrStand", boost::bind(&handle_object_sit_or_stand));

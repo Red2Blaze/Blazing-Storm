@@ -842,7 +842,6 @@ bool LLTabContainer::handleToolTip( S32 x, S32 y, MASK mask)
                 if (!tab_button->getVisible()) continue;
                 S32 local_x = x - tab_button->getRect().mLeft;
                 S32 local_y = y - tab_button->getRect().mBottom;
-                if (tab_button->getRect().pointInRect(x, y)) // <FS:minerjr> [FIRE-36603] - The handleToolTip will display a tool tip always if not empty and does not do a bounds check.
                 handled = tab_button->handleToolTip(local_x, local_y, mask);
                 if( handled )
                 {
@@ -1352,7 +1351,6 @@ void LLTabContainer::addTabPanel(const TabPanelParams& panel)
         mScrollPos = mMaxScrollPos;
     }
 
-    addLabelToolTip(tuple); // <FS:minerjr> [FIRE-36603] - Attempt to add label tool tip for truncated labels.
 }
 
 void LLTabContainer::addPlaceholder(LLPanel* child, const std::string& label)
@@ -1930,7 +1928,6 @@ void LLTabContainer::reshapeTuple(LLTabTuple* tuple)
         // tabs have changed size, might need to scroll to see current tab
         updateMaxScrollPos();
     }
-    addLabelToolTip(tuple); // <FS:minerjr> [FIRE-36603] - Attempt to add label tool tip for truncated labels.
 }
 
 void LLTabContainer::setTitle(const std::string& title)

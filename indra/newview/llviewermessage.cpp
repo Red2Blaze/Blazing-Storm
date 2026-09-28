@@ -25,6 +25,7 @@
  */
 
 #include "llviewerprecompiledheaders.h"
+#include "blazingstorm/remote/bsworldinteraction.h" // <BlazingStorm>
 #include "llviewermessage.h"
 
 // Linden libraries
@@ -8350,6 +8351,12 @@ bool callback_script_dialog(const LLSD& notification, const LLSD& response)
     }
 // [/RLVa:KB]
 
+    if (notification["payload"].has("blazing_storm_dialog_id"))
+    {
+        BlazingStorm::WorldInteraction::instance().subjectDialogAnswered(
+            notification["payload"]["blazing_storm_dialog_id"].asString());
+    }
+
     if (0 <= button_idx)
     {
         LLMessageSystem* msg = gMessageSystem;
@@ -8439,11 +8446,27 @@ void process_script_dialog(LLMessageSystem* msg, void**)
     }
 
     LLNotificationForm form;
+    std::vector<std::string> blazing_button_labels;
+    blazing_button_labels.reserve(button_count);
     for (i = 0; i < button_count; i++)
     {
         std::string tdesc;
         msg->getString("Buttons", "ButtonLabel", tdesc, i);
         form.addElement("button", std::string(tdesc));
+        blazing_button_labels.push_back(tdesc);
+    }
+
+    const std::string blazing_dialog_id =
+        BlazingStorm::WorldInteraction::instance().captureScriptDialog(
+            object_id,
+            object_name,
+            message,
+            chat_channel,
+            msg->getSender().getIPandPort(),
+            blazing_button_labels);
+    if (!blazing_dialog_id.empty())
+    {
+        payload["blazing_storm_dialog_id"] = blazing_dialog_id;
     }
 
     LLSD args;
@@ -8461,6 +8484,13 @@ void process_script_dialog(LLMessageSystem* msg, void**)
         args["GROUPNAME"] = last_name;
         notification = LLNotifications::instance().add(
             LLNotification::Params("ScriptDialogGroup").substitutions(args).payload(payload).form_elements(form.asLLSD()));
+    }
+
+    if (!blazing_dialog_id.empty() && notification)
+    {
+        BlazingStorm::WorldInteraction::instance().linkSubjectNotification(
+            blazing_dialog_id,
+            notification->getID());
     }
 }
 

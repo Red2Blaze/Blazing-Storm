@@ -1,0 +1,117 @@
+/**
+ * @file bsremotesession.cpp
+ * @brief Blazing Storm remote-control session state and permission model.
+ *
+ * This file is part of the Blazing Storm viewer fork.
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation;
+ * version 2.1 of the License only.
+ */
+
+#include "llviewerprecompiledheaders.h"
+
+#include "blazingstorm/remote/bsremotesession.h"
+#include "blazingstorm/remote/bsworldinteraction.h"
+#include "blazingstorm/remote/bsremoteactions.h"
+#include "blazingstorm/remote/bsremotefeatures.h"
+
+#include <utility>
+
+namespace BlazingStorm
+{
+    RemoteSession& RemoteSession::instance()
+    {
+        static RemoteSession session;
+        return session;
+    }
+
+    RemotePermissionMask RemoteSession::sanitizePermissions(RemotePermissionMask permissions)
+    {
+        return permissions & allRemotePermissions();
+    }
+
+    void RemoteSession::begin(std::string controller_id,
+                              RemotePermissionMask permissions,
+                              SubjectRestrictionMask restrictions)
+    {
+        RemoteActions::instance().releaseCamera();
+        WorldInteraction::instance().reset();
+        RemoteFeatures::instance().reset();
+        mControllerId = std::move(controller_id);
+        mPermissions = sanitizePermissions(permissions);
+        mSubjectRestrictions = restrictions;
+        mSubjectLocalMovementDisabled = false;
+        mActive = true;
+    }
+
+    void RemoteSession::end()
+    {
+        RemoteFeatures::instance().reset();
+        RemoteActions::instance().releaseCamera();
+        WorldInteraction::instance().reset();
+        mActive = false;
+        mControllerId.clear();
+        mPermissions = 0;
+        mSubjectRestrictions = 0;
+        mSubjectLocalMovementDisabled = false;
+    }
+
+    bool RemoteSession::isActive() const
+    {
+        return mActive;
+    }
+
+    const std::string& RemoteSession::controllerId() const
+    {
+        return mControllerId;
+    }
+
+    RemotePermissionMask RemoteSession::permissions() const
+    {
+        return mPermissions;
+    }
+
+    void RemoteSession::setPermissions(RemotePermissionMask permissions)
+    {
+        mPermissions = sanitizePermissions(permissions);
+        if (!hasPermission(RemotePermission::Camera)) RemoteActions::instance().releaseCamera();
+        RemoteFeatures::instance().permissionsChanged();
+    }
+
+    bool RemoteSession::hasPermission(RemotePermission permission) const
+    {
+        return mActive && (mPermissions & toMask(permission)) != 0;
+    }
+
+    SubjectRestrictionMask RemoteSession::subjectRestrictions() const
+    {
+        return mSubjectRestrictions;
+    }
+
+    void RemoteSession::setSubjectRestrictions(SubjectRestrictionMask restrictions)
+    {
+        mSubjectRestrictions = restrictions;
+    }
+
+    bool RemoteSession::isSubjectRestricted(SubjectRestriction restriction) const
+    {
+        return mActive && (mSubjectRestrictions & toMask(restriction)) != 0;
+    }
+
+    bool RemoteSession::subjectLocalMovementDisabled() const
+    {
+        return mActive && mSubjectLocalMovementDisabled;
+    }
+
+    void RemoteSession::setSubjectLocalMovementDisabled(bool disabled)
+    {
+        mSubjectLocalMovementDisabled = mActive && disabled;
+    }
+
+    void RemoteSession::emergencyRelease()
+    {
+        end();
+    }
+}

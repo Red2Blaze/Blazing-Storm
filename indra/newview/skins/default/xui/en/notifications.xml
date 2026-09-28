@@ -8935,6 +8935,29 @@ Offer a teleport?
 
   <notification
    icon="notify.tga"
+   name="BlazingStormPossessionRequest"
+   label="Blazing Storm possession request"
+   persist="true"
+   fade_toast="false"
+   type="offer">
+    <tag>confirm</tag>
+[CONTROLLER] is asking to control this avatar through Blazing Storm.
+
+This controller is not on your Blazing Storm whitelist. Accepting starts a possession session with the basic Movement + Nearby Chat permissions. You can change permissions after accepting, add the controller to your whitelist for future automatic acceptance, or end control at any time with the visible Release Control button.
+    <form name="form">
+      <button
+       index="0"
+       name="Accept"
+       text="Accept"/>
+      <button
+       index="1"
+       name="Decline"
+       text="Decline"/>
+    </form>
+  </notification>
+
+  <notification
+   icon="notify.tga"
    name="OfferFriendship"
    label="Friendship offer from [NAME_LABEL]"
    log_to_im="true"
@@ -9331,6 +9354,21 @@ Do not allow access if you do not fully understand why it wants access to your a
        text="Deny"/>
     </form>
     <footer>[FOOTERTEXT]</footer>
+  </notification>
+
+  <notification
+   icon="notify.tga"
+   name="BlazingStormForwardedScriptDialog"
+   show_toast="false"
+   type="notify">
+Blazing Storm forwarded &apos;&lt;nolink&gt;[TITLE]&lt;/nolink&gt;&apos; from the possessed avatar:
+[MESSAGE]
+    <form name="form">
+      <button
+       index="-1"
+       name="Dismiss"
+       text="Dismiss"/>
+    </form>
   </notification>
 
 	<notification

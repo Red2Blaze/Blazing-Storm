@@ -954,21 +954,17 @@ void FSManipRotateJoint::renderNameXYZ(const LLQuaternion& rot)
         }
 
         auto renderTextWithShadow = [&](const LLWString& text, F32 x, F32 y, const LLColor4& color) {
-            if (getUserEditHintTextShadow())
-            {
-                font->render(text, 0, x + 1.f, y - 2.f, LLColor4::black,
-                    LLFontGL::LEFT, LLFontGL::BASELINE,
-                    LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, nullptr);
-            }
-
+            font->render(text, 0, x + 1.f, y - 2.f, LLColor4::black,
+                LLFontGL::LEFT, LLFontGL::BASELINE,
+                LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, nullptr);
             font->render(text, 0, x, y, color,
                 LLFontGL::LEFT, LLFontGL::BASELINE,
                 LLFontGL::NORMAL, LLFontGL::NO_SHADOW, S32_MAX, 1000, nullptr);
             };
 
-        renderTextWithShadow(current_eulerX_str, window_center_x - 122.f, base_y, getUserEditColor(VX));
-        renderTextWithShadow(current_eulerY_str, window_center_x - 47.f, base_y, getUserEditColor(VY));
-        renderTextWithShadow(current_eulerZ_str, window_center_x + 28.f, base_y, getUserEditColor(VZ));
+        renderTextWithShadow(current_eulerX_str, window_center_x - 122.f, base_y, LLColor4(1.f, 0.5f, 0.5f, 1.f));
+        renderTextWithShadow(current_eulerY_str, window_center_x - 47.f, base_y, LLColor4(0.5f, 1.f, 0.5f, 1.f));
+        renderTextWithShadow(current_eulerZ_str, window_center_x + 28.f, base_y, LLColor4(0.5f, 0.5f, 1.f, 1.f));
         renderTextWithShadow(current_angle_str, window_center_x + 103.f, base_y, LLColor4(1.f, 0.65f, 0.f, 1.f));
         base_y += 20.f;
         renderTextWithShadow(current_joint_str, window_center_x - 130.f, base_y, LLColor4(1.f, 0.1f, 1.f, 1.f));

@@ -87,6 +87,21 @@ endif ()
 
 set(viewer_SOURCE_FILES
 # <Add FS includes below this line>
+    blazingstorm/remote/bsremotesession.cpp
+    blazingstorm/remote/bsremoteactions.cpp
+    blazingstorm/remote/bsdebugcommands.cpp
+    blazingstorm/remote/bsremoteevents.cpp
+    blazingstorm/remote/bssubjectpolicy.cpp
+    blazingstorm/remote/bsremotecontroller.cpp
+    blazingstorm/remote/bsremotecommanddispatcher.cpp
+    blazingstorm/remote/bslocaltransport.cpp
+    blazingstorm/remote/bsrelaytransport.cpp
+    blazingstorm/remote/bscontrollerinput.cpp
+    blazingstorm/remote/bstruststore.cpp
+    blazingstorm/remote/bsrequestactions.cpp
+    blazingstorm/remote/bsworldinteraction.cpp
+    blazingstorm/remote/bsremotefeatures.cpp
+    blazingstorm/ui/bsremotefloater.cpp
     alfloaterregiontracker.cpp
     animationexplorer.cpp
     ao.cpp
@@ -953,6 +968,23 @@ set(viewer_HEADER_FILES
     ViewerInstall.cmake
 
 # <Add FS includes below this line>
+    blazingstorm/remote/bsremotesession.h
+    blazingstorm/remote/bsremoteactions.h
+    blazingstorm/remote/bsdebugcommands.h
+    blazingstorm/remote/bsremoteevents.h
+    blazingstorm/remote/bssubjectpolicy.h
+    blazingstorm/remote/bsremoteprotocol.h
+    blazingstorm/remote/bsremotecontroller.h
+    blazingstorm/remote/bsremotecommanddispatcher.h
+    blazingstorm/remote/bsremotetransport.h
+    blazingstorm/remote/bslocaltransport.h
+    blazingstorm/remote/bsrelaytransport.h
+    blazingstorm/remote/bscontrollerinput.h
+    blazingstorm/remote/bstruststore.h
+    blazingstorm/remote/bsrequestactions.h
+    blazingstorm/remote/bsworldinteraction.h
+    blazingstorm/remote/bsremotefeatures.h
+    blazingstorm/ui/bsremotefloater.h
     alfloaterregiontracker.h
     animationexplorer.h
     ao.h
@@ -2304,6 +2336,16 @@ add_executable(${VIEWER_BINARY_NAME}
     ${viewer_SOURCE_FILES}
     )
 
+# <BlazingStorm>
+# Custom sources live below indra/newview/blazingstorm/. Firestorm's original
+# sources normally include local newview headers by filename because they live
+# directly in this directory. Add the newview source root explicitly so nested
+# Blazing Storm sources can follow the same include convention.
+target_include_directories(${VIEWER_BINARY_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+# </BlazingStorm> BlazingStorm nested source include path
+
 # add package files
 file(GLOB EVENT_HOST_SCRIPT_GLOB_LIST
      ${CMAKE_CURRENT_SOURCE_DIR}/../viewer_components/*.py)
@@ -2649,6 +2691,8 @@ target_link_libraries(${VIEWER_BINARY_NAME}
         lllogin
         llprimitive
         llappearance
+        ll::boost # <BlazingStorm> Boost.Asio local and Azure relay transports
+        ll::openssl # <BlazingStorm> Azure relay TLS
         ${LLPHYSICSEXTENSIONS_LIBRARIES}
         ll::bugsplat
         ll::ndof

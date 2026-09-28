@@ -27,6 +27,8 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "llviewerinput.h"
+#include "blazingstorm/remote/bscontrollerinput.h" // <BlazingStorm>
+#include "blazingstorm/remote/bsremotesession.h" // <BlazingStorm>
 
 #include "llappviewer.h"
 #include "llfloaterreg.h"
@@ -68,6 +70,13 @@ const F32 ORBIT_NUDGE_RATE = 0.05f;  // fraction of normal speed
 
 const LLKeyData agent_control_lbutton(CLICK_LEFT, KEY_NONE, MASK_NONE, true);
 
+static bool blazing_subject_movement_blocked()
+{
+    return BlazingStorm::RemoteSession::instance().isActive()
+        && BlazingStorm::RemoteSession::instance().isSubjectRestricted(
+            BlazingStorm::SubjectRestriction::Movement);
+}
+
 struct LLKeybindFunctionData
 {
     LLKeybindFunctionData(std::function<bool(EKeystate keystate)> function, bool global)
@@ -92,9 +101,27 @@ LLViewerInput gViewerInput;
 bool agent_jump( EKeystate s )
 {
     static bool first_fly_attempt(true);
+
+    if (blazing_subject_movement_blocked())
+    {
+        return true;
+    }
+
+    const bool blaze_suppress_local =
+        BlazingStorm::ControllerInput::routeMovement(
+            BlazingStorm::RemoteCommandType::MoveUp,
+            BlazingStorm::RemoteCommandType::StopVertical,
+            KEYSTATE_DOWN == s,
+            KEYSTATE_UP == s);
+
     if (KEYSTATE_UP == s)
     {
         first_fly_attempt = true;
+        return true;
+    }
+
+    if (blaze_suppress_local)
+    {
         return true;
     }
     F32 time = gKeyboard->getCurKeyElapsedTime();
@@ -129,6 +156,20 @@ bool agent_jump( EKeystate s )
 
 bool agent_push_down( EKeystate s )
 {
+    if (blazing_subject_movement_blocked())
+    {
+        return true;
+    }
+
+    if (BlazingStorm::ControllerInput::routeMovement(
+            BlazingStorm::RemoteCommandType::MoveDown,
+            BlazingStorm::RemoteCommandType::StopVertical,
+            KEYSTATE_DOWN == s,
+            KEYSTATE_UP == s))
+    {
+        return true;
+    }
+
     if( KEYSTATE_UP == s  ) return true;
     // <FS:Ansariel> Chalice Yao's crouch toggle
     //gAgent.moveUp(-1);
@@ -233,6 +274,20 @@ bool agent_push_forward( EKeystate s )
     }
     else
     {
+        if (blazing_subject_movement_blocked())
+        {
+            return true;
+        }
+
+        if (BlazingStorm::ControllerInput::routeMovement(
+                BlazingStorm::RemoteCommandType::MoveForward,
+                BlazingStorm::RemoteCommandType::StopForward,
+                KEYSTATE_DOWN == s,
+                KEYSTATE_UP == s))
+        {
+            return true;
+        }
+
         agent_push_forwardbackward(s, 1, LLAgent::DOUBLETAP_FORWARD);
     }
     return true;
@@ -250,16 +305,30 @@ bool agent_push_backward( EKeystate s )
     {
         camera_move_backward(s);
     }
-    // <FS:PP> Speed optimisation
-    // else if (!gAgent.backwardGrabbed() && gAgentAvatarp->isSitting() && gSavedSettings.getBOOL("LeaveMouselook"))
-    else if (!gAgent.backwardGrabbed() && gAgentAvatarp->isSitting() && leave_mouselook())
-    // </FS:PP>
-    {
-        gAgentCamera.changeCameraToThirdPerson();
-    }
     else
     {
-        agent_push_forwardbackward(s, -1, LLAgent::DOUBLETAP_BACKWARD);
+        if (blazing_subject_movement_blocked())
+        {
+            return true;
+        }
+
+        if (BlazingStorm::ControllerInput::routeMovement(
+                BlazingStorm::RemoteCommandType::MoveBackward,
+                BlazingStorm::RemoteCommandType::StopForward,
+                KEYSTATE_DOWN == s,
+                KEYSTATE_UP == s))
+        {
+            return true;
+        }
+
+        if (!gAgent.backwardGrabbed() && gAgentAvatarp->isSitting() && gSavedSettings.getBOOL("LeaveMouselook"))
+        {
+            gAgentCamera.changeCameraToThirdPerson();
+        }
+        else
+        {
+            agent_push_forwardbackward(s, -1, LLAgent::DOUBLETAP_BACKWARD);
+        }
     }
     return true;
 }
@@ -285,6 +354,17 @@ static void agent_slide_leftright( EKeystate s, S32 direction, LLAgent::EDoubleT
 bool agent_slide_left( EKeystate s )
 {
     if(gAgent.isMovementLocked()) return true;
+    if (blazing_subject_movement_blocked()) return true;
+
+    if (BlazingStorm::ControllerInput::routeMovement(
+            BlazingStorm::RemoteCommandType::StrafeLeft,
+            BlazingStorm::RemoteCommandType::StopStrafe,
+            KEYSTATE_DOWN == s,
+            KEYSTATE_UP == s))
+    {
+        return true;
+    }
+
     agent_slide_leftright(s, 1, LLAgent::DOUBLETAP_SLIDELEFT);
     return true;
 }
@@ -293,6 +373,17 @@ bool agent_slide_left( EKeystate s )
 bool agent_slide_right( EKeystate s )
 {
     if(gAgent.isMovementLocked()) return true;
+    if (blazing_subject_movement_blocked()) return true;
+
+    if (BlazingStorm::ControllerInput::routeMovement(
+            BlazingStorm::RemoteCommandType::StrafeRight,
+            BlazingStorm::RemoteCommandType::StopStrafe,
+            KEYSTATE_DOWN == s,
+            KEYSTATE_UP == s))
+    {
+        return true;
+    }
+
     agent_slide_leftright(s, -1, LLAgent::DOUBLETAP_SLIDERIGHT);
     return true;
 }
@@ -309,6 +400,7 @@ bool agent_turn_left(EKeystate s)
     }
 
     if(gAgent.isMovementLocked()) return false;
+    if (blazing_subject_movement_blocked()) return true;
 
     if (LLToolCamera::getInstance()->mouseSteerMode())
     {
@@ -316,6 +408,15 @@ bool agent_turn_left(EKeystate s)
     }
     else
     {
+        if (BlazingStorm::ControllerInput::routeMovement(
+                BlazingStorm::RemoteCommandType::TurnLeft,
+                BlazingStorm::RemoteCommandType::StopTurn,
+                KEYSTATE_DOWN == s,
+                KEYSTATE_UP == s))
+        {
+            return true;
+        }
+
         if (KEYSTATE_UP == s)
         {
             // Check temporary running. In case user released 'left' key with shift already released.
@@ -347,6 +448,15 @@ bool agent_turn_right( EKeystate s )
     }
     else
     {
+        if (BlazingStorm::ControllerInput::routeMovement(
+                BlazingStorm::RemoteCommandType::TurnRight,
+                BlazingStorm::RemoteCommandType::StopTurn,
+                KEYSTATE_DOWN == s,
+                KEYSTATE_UP == s))
+        {
+            return true;
+        }
+
         if (KEYSTATE_UP == s)
         {
             // Check temporary running. In case user released 'right' key with shift already released.
@@ -378,6 +488,20 @@ bool agent_look_down( EKeystate s )
 
 bool agent_toggle_fly( EKeystate s )
 {
+    if (blazing_subject_movement_blocked())
+    {
+        return true;
+    }
+
+    if (BlazingStorm::ControllerInput::routeMovement(
+            BlazingStorm::RemoteCommandType::ToggleFly,
+            BlazingStorm::RemoteCommandType::None,
+            KEYSTATE_DOWN == s,
+            KEYSTATE_UP == s))
+    {
+        return true;
+    }
+
     // Only catch the edge
     if (KEYSTATE_DOWN == s )
     {
