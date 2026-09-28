@@ -14,8 +14,10 @@
 #include <boost/asio/ssl/host_name_verification.hpp>
 #include <boost/asio/ssl/stream_base.hpp>
 #include <boost/beast/core.hpp>
+#include <boost/beast/http/field.hpp>
 #include <boost/beast/ssl.hpp>
 #include <boost/beast/websocket.hpp>
+#include <boost/beast/websocket/ssl.hpp>
 
 #include <openssl/err.h>
 #include <openssl/ssl.h>
