@@ -313,6 +313,7 @@ namespace BlazingStorm
         auto& controller = RemoteController::instance();
 
         std::string status = transportRoleName(transport.role());
+        status += transport.usingRelay() ? " | relay" : " | local";
         status += transport.isConnected() ? " | connected" : " | disconnected";
         status += transport.isPaired() ? " | paired" : " | not paired";
         if (!transport.lastStatus().empty())
