@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<floater
+ legacy_header_height="18"
+ can_close="true"
+ can_minimize="true"
+ can_resize="true"
+ height="650"
+ min_height="560"
+ min_width="500"
+ width="560"
+ layout="topleft"
+ name="blazing_storm_fake_look_at"
+ title="Blazing Storm - Fake Look At Lab">
+
+  <text
+   name="intro"
+   layout="topleft"
+   left="16"
+   right="-16"
+   top="16"
+   height="48"
+   follows="left|top|right"
+   word_wrap="true">
+    Generate additional ViewerEffect look-at targets independently of your normal camera look-at. Use this for visual experiments and testing. Stopping sends clear effects before retiring them.
+  </text>
+
+  <text
+   name="mode_label"
+   layout="topleft"
+   left="16"
+   top="76"
+   width="105"
+   height="18">
+    Target mode:
+  </text>
+  <combo_box
+   name="mode"
+   layout="topleft"
+   left="128"
+   top="70"
+   width="210"
+   height="26"
+   allow_text_entry="false">
+    <combo_box.item label="Random positions" name="RandomPositions" value="random_positions" />
+    <combo_box.item label="Look at all avatars" name="AllAvatars" value="all_avatars" />
+    <combo_box.item label="Random avatars" name="RandomAvatars" value="random_avatars" />
+    <combo_box.item label="Random world objects" name="RandomObjects" value="random_objects" />
+    <combo_box.item label="Mixed avatars / objects / positions" name="Mixed" value="mixed" />
+  </combo_box>
+
+  <text
+   name="look_type_label"
+   layout="topleft"
+   left="16"
+   top="112"
+   width="105"
+   height="18">
+    Look-at type:
+  </text>
+  <combo_box
+   name="look_type"
+   layout="topleft"
+   left="128"
+   top="106"
+   width="210"
+   height="26"
+   allow_text_entry="false">
+    <combo_box.item label="Focus" name="Focus" value="8" />
+    <combo_box.item label="Select" name="Select" value="7" />
+    <combo_box.item label="Mouselook" name="Mouselook" value="9" />
+    <combo_box.item label="Conversation" name="Conversation" value="6" />
+    <combo_box.item label="Hover" name="Hover" value="5" />
+    <combo_box.item label="Respond" name="Respond" value="4" />
+    <combo_box.item label="Free look" name="FreeLook" value="3" />
+    <combo_box.item label="Auto listen" name="AutoListen" value="2" />
+    <combo_box.item label="Idle" name="Idle" value="1" />
+  </combo_box>
+
+  <text
+   name="count_label"
+   layout="topleft"
+   left="16"
+   top="151"
+   width="105"
+   height="18">
+    Effect count:
+  </text>
+  <spinner
+   name="count"
+   layout="topleft"
+   left="128"
+   top="144"
+   width="92"
+   height="26"
+   min_val="0"
+   max_val="64"
+   increment="1"
+   decimal_digits="0"
+   value="8"
+   tool_tip="0 means all matching avatars only when using Look at all avatars. Other modes use at least one effect." />
+  <check_box
+   name="randomize_count"
+   label="Randomize 1..count each refresh"
+   layout="topleft"
+   left="238"
+   top="149"
+   width="250"
+   height="20" />
+
+  <text
+   name="distance_header"
+   layout="topleft"
+   left="16"
+   top="194"
+   width="240"
+   height="18"
+   font="SansSerifSmall"
+   font.style="BOLD">
+    Distance filter / random radius
+  </text>
+
+  <text name="min_distance_label" layout="topleft" left="16" top="224" width="105" height="18">
+    Minimum:
+  </text>
+  <spinner
+   name="min_distance"
+   layout="topleft"
+   left="128"
+   top="217"
+   width="92"
+   height="26"
+   min_val="0"
+   max_val="4096"
+   increment="0.5"
+   decimal_digits="1"
+   value="2" />
+
+  <text name="max_distance_label" layout="topleft" left="250" top="224" width="90" height="18">
+    Maximum:
+  </text>
+  <spinner
+   name="max_distance"
+   layout="topleft"
+   left="342"
+   top="217"
+   width="100"
+   height="26"
+   min_val="0"
+   max_val="4096"
+   increment="1"
+   decimal_digits="1"
+   value="25" />
+
+  <text
+   name="timing_header"
+   layout="topleft"
+   left="16"
+   top="265"
+   width="240"
+   height="18"
+   font="SansSerifSmall"
+   font.style="BOLD">
+    Motion and refresh
+  </text>
+
+  <text name="refresh_label" layout="topleft" left="16" top="295" width="105" height="18">
+    Refresh every:
+  </text>
+  <spinner
+   name="refresh_seconds"
+   layout="topleft"
+   left="128"
+   top="288"
+   width="92"
+   height="26"
+   min_val="0.5"
+   max_val="120"
+   increment="0.5"
+   decimal_digits="1"
+   value="3"
+   tool_tip="Minimum is 0.5 seconds to avoid excessive ViewerEffect traffic." />
+  <text name="refresh_units" layout="topleft" left="226" top="295" width="65" height="18">seconds</text>
+
+  <text name="vertical_label" layout="topleft" left="16" top="331" width="105" height="18">
+    Vertical spread:
+  </text>
+  <spinner
+   name="vertical_scale"
+   layout="topleft"
+   left="128"
+   top="324"
+   width="92"
+   height="26"
+   min_val="0"
+   max_val="1"
+   increment="0.05"
+   decimal_digits="2"
+   value="0.35"
+   tool_tip="Random-position mode: 0 stays level with you; 1 allows the full radius vertically." />
+
+  <text name="jitter_label" layout="topleft" left="250" top="331" width="90" height="18">
+    Object jitter:
+  </text>
+  <spinner
+   name="object_jitter"
+   layout="topleft"
+   left="342"
+   top="324"
+   width="100"
+   height="26"
+   min_val="0"
+   max_val="64"
+   increment="0.05"
+   decimal_digits="2"
+   value="0.25"
+   tool_tip="Random local offset around world-object targets. Avatar targets still aim at the avatar." />
+
+  <text
+   name="filters_header"
+   layout="topleft"
+   left="16"
+   top="374"
+   width="240"
+   height="18"
+   font="SansSerifSmall"
+   font.style="BOLD">
+    Object filters
+  </text>
+
+  <check_box
+   name="current_region_only"
+   label="Only targets in my current region"
+   layout="topleft"
+   left="16"
+   top="402"
+   width="275"
+   height="20"
+   value="true" />
+  <check_box
+   name="root_objects_only"
+   label="World objects: root prims only"
+   layout="topleft"
+   left="16"
+   top="430"
+   width="275"
+   height="20"
+   value="true" />
+  <check_box
+   name="exclude_attachments"
+   label="World objects: exclude attachments"
+   layout="topleft"
+   left="300"
+   top="402"
+   width="240"
+   height="20"
+   value="true" />
+  <check_box
+   name="stop_on_close"
+   label="Stop when this window closes"
+   layout="topleft"
+   left="300"
+   top="430"
+   width="240"
+   height="20"
+   value="false" />
+
+  <text
+   name="limits_note"
+   layout="topleft"
+   left="16"
+   right="-16"
+   top="466"
+   height="46"
+   follows="left|top|right"
+   word_wrap="true">
+    Hard limit: 64 simultaneous fake look-at effects. Firestorm look-at privacy/limiter settings are still respected. Short-lived look-at types are recreated automatically while running.
+  </text>
+
+  <button
+   name="start"
+   label="Start"
+   layout="topleft"
+   left="16"
+   top="526"
+   width="130"
+   height="32" />
+  <button
+   name="refresh_now"
+   label="Refresh Targets Now"
+   layout="topleft"
+   left="158"
+   top="526"
+   width="180"
+   height="32" />
+  <button
+   name="stop"
+   label="STOP / CLEAR"
+   layout="topleft"
+   left="350"
+   top="526"
+   width="160"
+   height="32" />
+
+  <text
+   name="status_header"
+   layout="topleft"
+   left="16"
+   top="579"
+   width="120"
+   height="18"
+   font="SansSerifSmall"
+   font.style="BOLD">
+    Status
+  </text>
+  <text
+   name="status"
+   layout="topleft"
+   left="16"
+   right="-16"
+   top="602"
+   bottom="-12"
+   follows="left|top|right|bottom"
+   word_wrap="true">
+    Stopped
+  </text>
+</floater>
