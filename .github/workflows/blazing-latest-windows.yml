@@ -235,12 +235,12 @@ jobs:
           $dist = Join-Path $env:GITHUB_WORKSPACE "dist"
           New-Item -ItemType Directory -Path $dist -Force | Out-Null
 
-          $installer = Join-Path $dist "Blazing-Storm-Latest-Windows-x64-AVX2-AVX2.exe"
+          $installer = Join-Path $dist "Blazing-Storm-Latest-Windows-x64-AVX2.exe"
           Copy-Item $setup.FullName $installer -Force
 
           $hash = (Get-FileHash -Path $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  Blazing-Storm-Latest-Windows-x64-AVX2-AVX2.exe" |
-            Set-Content -Path (Join-Path $dist "Blazing-Storm-Latest-Windows-x64-AVX2-AVX2.sha256") -Encoding ascii
+          "$hash  Blazing-Storm-Latest-Windows-x64-AVX2.exe" |
+            Set-Content -Path (Join-Path $dist "Blazing-Storm-Latest-Windows-x64-AVX2.sha256") -Encoding ascii
 
           "sha256=$hash" >> $env:GITHUB_OUTPUT
           "original_name=$($setup.Name)" >> $env:GITHUB_OUTPUT
@@ -253,8 +253,8 @@ jobs:
         with:
           name: Blazing-Storm-Latest-Windows-x64-AVX2
           path: |
-            dist/Blazing-Storm-Latest-Windows-x64-AVX2-AVX2.exe
-            dist/Blazing-Storm-Latest-Windows-x64-AVX2-AVX2.sha256
+            dist/Blazing-Storm-Latest-Windows-x64-AVX2.exe
+            dist/Blazing-Storm-Latest-Windows-x64-AVX2.sha256
           retention-days: 14
           if-no-files-found: error
 
@@ -474,17 +474,17 @@ jobs:
             exit 1
           fi
 
-          cp "$package" dist/Blazing-Storm-Latest-Linux-x64-AVX2-AVX2.tar.xz
-          sha256sum dist/Blazing-Storm-Latest-Linux-x64-AVX2-AVX2.tar.xz |
-            sed 's#dist/##' > dist/Blazing-Storm-Latest-Linux-x64-AVX2-AVX2.sha256
+          cp "$package" dist/Blazing-Storm-Latest-Linux-x64-AVX2.tar.xz
+          sha256sum dist/Blazing-Storm-Latest-Linux-x64-AVX2.tar.xz |
+            sed 's#dist/##' > dist/Blazing-Storm-Latest-Linux-x64-AVX2.sha256
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v7
         with:
           name: Blazing-Storm-Latest-Linux-x64-AVX2
           path: |
-            dist/Blazing-Storm-Latest-Linux-x64-AVX2-AVX2.tar.xz
-            dist/Blazing-Storm-Latest-Linux-x64-AVX2-AVX2.sha256
+            dist/Blazing-Storm-Latest-Linux-x64-AVX2.tar.xz
+            dist/Blazing-Storm-Latest-Linux-x64-AVX2.sha256
           retention-days: 14
           if-no-files-found: error
 
