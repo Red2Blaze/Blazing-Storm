@@ -79,17 +79,6 @@ namespace BlazingStorm
                     ctrl->getValue().asString());
             });
 
-        auto* relay_key = getChild<LLLineEditor>("relay_create_key");
-        relay_key->setText(
-            gSavedPerAccountSettings.getString("BlazingStormRelayCreateKey"));
-        relay_key->setCommitCallback(
-            [](LLUICtrl* ctrl, const LLSD&)
-            {
-                gSavedPerAccountSettings.setString(
-                    "BlazingStormRelayCreateKey",
-                    ctrl->getValue().asString());
-            });
-
         setupFeatures();
         getChild<LLCheckBoxCtrl>("allow_full_control")->setCommitCallback(
             [this](LLUICtrl* ctrl, const LLSD&)
