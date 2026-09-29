@@ -339,7 +339,7 @@ namespace BlazingStorm
 
         getChild<LLButton>("accept")->setEnabled(is_host && transport.hasPendingPairing());
         getChild<LLButton>("reject")->setEnabled(is_host && transport.hasPendingPairing());
-        getChild<LLButton>("disconnect")->setEnabled(transport.role() != RemoteRole::None);
+        getChild<LLButton>("disconnect")->setEnabled(transport.role() != RemoteRole::NoneValue);
         getChild<LLButton>("emergency_release")->setEnabled(subject_active || is_host);
         getChild<LLButton>("save_current_controller")->setEnabled(subject_active && is_host);
 
