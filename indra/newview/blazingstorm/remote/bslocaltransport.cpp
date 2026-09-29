@@ -311,8 +311,6 @@ namespace BlazingStorm
     {
         const std::string broker_url =
             gSavedPerAccountSettings.getString("BlazingStormRelayBrokerUrl");
-        const std::string create_key =
-            gSavedPerAccountSettings.getString("BlazingStormRelayCreateKey");
         const std::string create_path =
             gSavedPerAccountSettings.getString("BlazingStormRelayCreatePath");
 
@@ -322,13 +320,6 @@ namespace BlazingStorm
                 "Relay approval failed: no Azure Function broker URL is configured.";
             return false;
         }
-        if (create_key.empty())
-        {
-            mLastStatus =
-                "Relay approval failed: this Subject has no relay create key configured.";
-            return false;
-        }
-
         mRelayPreapproved = true;
         mPendingPairing = false;
         mBootstrapDeadline =
@@ -336,10 +327,6 @@ namespace BlazingStorm
 
         if (!RelayTransport::instance().createSession(
                 broker_url,
-                create_key,
-                mExpectedBootstrapControllerId,
-                mExpectedBootstrapControllerName,
-                mExpectedBootstrapNonce,
                 create_path))
         {
             mLastStatus = "Could not start the relay create-session request.";
