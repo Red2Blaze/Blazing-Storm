@@ -21,13 +21,11 @@ At the top of **Blazing Storm Remote Control**:
 
 - **Relay broker**: the HTTPS base URL of the Azure Function App, for example
   `https://YOUR-FUNCTION.azurewebsites.net`.
-- **Subject key**: the Relay Create Key. This is required only on a viewer/avatar
-  that can become the Subject. It is intentionally not persisted to the normal
-  per-account settings file.
-
 Both viewers should configure the same trusted broker base URL.
 
-The Controller never receives or needs the Relay Create Key.
+Relay server v0.2.1 does not require a viewer-side shared secret. Session
+creation is anonymous and returns short-lived signed Subject/Controller
+bootstrap material. The server signing key remains server-side only.
 
 If **Relay broker** is blank, the existing loopback-only transport remains
 available for local debug testing.
@@ -46,11 +44,12 @@ with protocol version 1 and hub `blazing-remote`.
 3. Subject validates that the actual IM sender matches the embedded UUID.
 4. Trusted Controllers auto-approve. Other Controllers use the normal Subject
    Accept/Decline prompt.
-5. Only after Subject approval, the Subject calls the Azure Function create
-   endpoint using the locally configured Relay Create Key.
-6. The broker returns a relay session ID plus distinct short-lived Subject and
-   Controller tickets.
-7. Subject sends only the session ID, Controller ticket, and original nonce to
+5. Only after Subject approval, the Subject calls anonymous
+   `POST /api/sessions`.
+6. The v0.2.1 broker returns a short-lived `subjectTicket` and
+   `controllerInvite`. A public session ID is optional; the viewer can use a
+   local correlation ID when the broker does not return one.
+7. Subject sends only the Controller invitation, correlation ID, and original nonce to
    the Controller through a visible Second Life IM.
 8. Subject exchanges its Subject ticket with the broker for a short-lived Azure
    Web PubSub client access URL.
@@ -95,9 +94,8 @@ joined groups.
 
 - Both viewers make outbound connections; neither opens an Internet listener.
 - The Controller cannot choose the Subject's broker URL.
-- Relay Create Key is Subject-only and is not included in URLs, SL IMs, or
-  Web PubSub messages.
-- The Relay Create Key field is runtime-only in the normal settings system.
+- No permanent relay secret is distributed to viewers.
+- The broker's signing key remains server-side.
 - TLS certificate and hostname validation are enabled.
 - On Windows, the viewer imports trusted Windows root certificates into the
   OpenSSL context used by the relay transport.
@@ -114,10 +112,9 @@ joined groups.
 1. Verify the deployed server health endpoint in a browser.
 2. Build `blazing/relay-webpubsub` on both viewers.
 3. Enter the same Function App HTTPS base URL in **Relay broker** on both.
-4. On the Subject only, paste the Relay Create Key into **Subject key**.
-5. Controller requests possession through the existing UI/IM button.
-6. Subject accepts.
-7. Status should progress through create, negotiate, Web PubSub connect, and
+4. Controller requests possession through the existing UI/IM button.
+5. Subject accepts.
+6. Status should progress through create, negotiate, Web PubSub connect, and
    finally `paired`.
 8. Test one movement command first.
 9. Then test chat, sit/touch, blue menus, camera, teleport, and inventory.
