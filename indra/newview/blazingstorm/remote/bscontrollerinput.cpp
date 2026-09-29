@@ -31,7 +31,7 @@ namespace BlazingStorm
             {
                 transport.sendCommand(controller.makeCommand(press_command));
             }
-            else if (key_up && release_command != RemoteCommandType::None)
+            else if (key_up && release_command != RemoteCommandType::NoneValue)
             {
                 transport.sendCommand(controller.makeCommand(release_command));
             }
