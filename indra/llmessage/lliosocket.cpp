@@ -215,30 +215,69 @@ LLSocket::ptr_t LLSocket::create(apr_socket_t* socket, apr_pool_t* pool)
 }
 
 
-bool LLSocket::blockingConnect(const LLHost& host)
+bool LLSocket::blockingConnect(const LLHost& host, S32 timeout, apr_status_t* status_out)
 {
+    if (status_out)
+    {
+        *status_out = APR_SUCCESS;
+    }
+
     // <FS:ND> Prevent log spam
-    if( !host.isOk() )
+    if (!host.isOk())
+    {
+        if (status_out)
+        {
+            *status_out = APR_EINVAL;
+        }
         return false;
+    }
     // </FS:ND>
 
-    if(!mSocket) return false;
+    if (!mSocket)
+    {
+        if (status_out)
+        {
+            *status_out = APR_EGENERAL;
+        }
+        return false;
+    }
+
     apr_sockaddr_t* sa = NULL;
-    std::string ip_address;
-    ip_address = host.getIPString();
-    if(ll_apr_warn_status(apr_sockaddr_info_get(
+    const std::string ip_address = host.getIPString();
+
+    // LLSocket is created as APR_INET and LLHost currently stores IPv4 only,
+    // so resolve the numeric proxy endpoint explicitly as IPv4 as well.
+    apr_status_t status = apr_sockaddr_info_get(
         &sa,
         ip_address.c_str(),
-        APR_UNSPEC,
+        APR_INET,
         host.getPort(),
         0,
-        mPool)))
+        mPool);
+    if (status_out)
+    {
+        *status_out = status;
+    }
+    if (ll_apr_warn_status(status))
     {
         return false;
     }
-    setBlocking(1000);
+
+    setBlocking(timeout);
     ll_debug_socket("Blocking connect", mSocket);
-    if(ll_apr_warn_status(apr_socket_connect(mSocket, sa))) return false;
+
+    status = apr_socket_connect(mSocket, sa);
+    if (status_out)
+    {
+        *status_out = status;
+    }
+
+    if (ll_apr_warn_status(status))
+    {
+        setNonBlocking();
+        return false;
+    }
+
     setNonBlocking();
     return true;
 }

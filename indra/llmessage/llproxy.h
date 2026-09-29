@@ -106,14 +106,13 @@ struct socks_command_request_t {
     U16     port;
 };
 
-// Standard SOCKS 5 reply packet
+// SOCKS 5 command reply prefix. BND.ADDR and BND.PORT are variable-length
+// and are read separately based on ATYP (RFC 1928).
 struct socks_command_response_t {
     U8      version;
     U8      reply;
     U8      reserved;
     U8      atype;
-    U8      add_bytes[4];
-    U16     port;
 };
 
 #define AUTH_NOT_ACCEPTABLE 0xFF // reply if preferred methods are not available
@@ -235,6 +234,9 @@ public:
     // Get the UDP proxy address and port. Call from main thread only.
     LLHost getUDPProxy() const { return mUDPProxy; }
 
+    // Last SOCKS control-channel error for user-facing diagnostics. Main thread only.
+    const std::string& getLastSocksError() const { return mLastSocksError; }
+
     /*###########################################################################################
     END OF NON-LOCKING METHODS
     ###########################################################################################*/
@@ -255,7 +257,7 @@ public:
     // Safe to call from any thread.
     static void applyProxySettings(CURL* handle);
     // Start a connection to the SOCKS 5 proxy. Call from main thread only.
-    S32 startSOCKSProxy(LLHost host);
+    S32 startSOCKSProxy(LLHost host, U16 client_udp_port = 0);
 
     // Disconnect and clean up any connection to the SOCKS 5 proxy. Call from main thread only.
     void stopSOCKSProxy();
@@ -283,7 +285,7 @@ private:
     ###########################################################################################*/
 
     // Perform a SOCKS 5 authentication and UDP association with the proxy server.
-    S32 proxyHandshake(LLHost proxy);
+    S32 proxyHandshake(LLHost proxy, U16 client_udp_port);
 
     // Get the currently selected auth method.
     LLSocks5AuthType getSelectedAuthMethod() const;
@@ -320,6 +322,9 @@ private:
 
     // socket handle to proxy TCP control channel
     LLSocket::ptr_t mProxyControlChannel;
+
+    // Human-readable detail for the most recent SOCKS control-channel failure.
+    std::string mLastSocksError;
 
     /*###########################################################################################
     END OF UNSHARED MEMBERS
