@@ -234,6 +234,9 @@ public:
     // Get the UDP proxy address and port. Call from main thread only.
     LLHost getUDPProxy() const { return mUDPProxy; }
 
+    // Last SOCKS control-channel error for user-facing diagnostics. Main thread only.
+    const std::string& getLastSocksError() const { return mLastSocksError; }
+
     /*###########################################################################################
     END OF NON-LOCKING METHODS
     ###########################################################################################*/
@@ -319,6 +322,9 @@ private:
 
     // socket handle to proxy TCP control channel
     LLSocket::ptr_t mProxyControlChannel;
+
+    // Human-readable detail for the most recent SOCKS control-channel failure.
+    std::string mLastSocksError;
 
     /*###########################################################################################
     END OF UNSHARED MEMBERS

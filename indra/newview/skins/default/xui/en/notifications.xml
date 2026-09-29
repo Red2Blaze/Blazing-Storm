@@ -10618,6 +10618,8 @@ Click and drag anywhere on the world to rotate your view
    name="SOCKS_HOST_CONNECT_FAILED"
    type="alertmodal">
 	Could not connect to SOCKS 5 proxy server "[HOST]:[PORT]".
+
+Reason: [REASON]
 	<tag>fail</tag>
    <usetemplate
      name="okbutton"

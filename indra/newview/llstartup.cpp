@@ -4463,6 +4463,7 @@ bool LLStartUp::startLLProxy()
                 LLSD subs;
                 subs["HOST"] = gSavedSettings.getString("Socks5ProxyHost");
                 subs["PORT"] = (S32)gSavedSettings.getU32("Socks5ProxyPort");
+                subs["REASON"] = LLProxy::getInstance()->getLastSocksError();
 
                 std::string error_string;
 

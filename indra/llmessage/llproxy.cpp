@@ -45,7 +45,7 @@ LLProxy* LLProxy::sProxyInstance = NULL;
 // Some helpful TCP static functions.
 static apr_status_t tcp_blocking_handshake(LLSocket::ptr_t handle, const char* dataout, apr_size_t outlen, char* datain, apr_size_t inlen); // Do a TCP data handshake
 static apr_status_t tcp_blocking_receive(LLSocket::ptr_t handle, char* datain, apr_size_t inlen); // Receive an exact amount of control-channel data
-static LLSocket::ptr_t tcp_open_channel(LLHost host); // Open a TCP channel to a given host
+static LLSocket::ptr_t tcp_open_channel(LLHost host, std::string* error_message); // Open a TCP channel to a given host
 static void tcp_close_channel(LLSocket::ptr_t* handle_ptr); // Close an open TCP channel
 
 LLProxy::LLProxy():
@@ -57,7 +57,8 @@ LLProxy::LLProxy():
         mProxyType(LLPROXY_SOCKS),
         mAuthMethodSelected(METHOD_NOAUTH),
         mSocksUsername(),
-        mSocksPassword()
+        mSocksPassword(),
+        mLastSocksError()
 {}
 
 LLProxy::~LLProxy()
@@ -333,8 +334,9 @@ S32 LLProxy::startSOCKSProxy(LLHost host)
 
     // Close any running SOCKS connection.
     stopSOCKSProxy();
+    mLastSocksError.clear();
 
-    mProxyControlChannel = tcp_open_channel(mTCPProxy);
+    mProxyControlChannel = tcp_open_channel(mTCPProxy, &mLastSocksError);
     if (!mProxyControlChannel)
     {
         return SOCKS_HOST_CONNECT_FAILED;
@@ -692,23 +694,45 @@ static apr_status_t tcp_blocking_receive(LLSocket::ptr_t handle, char* datain, a
  * @param host      The host to open the connection to.
  * @return          The created socket.  Will evaluate as NULL if the connection is unsuccessful.
  */
-static LLSocket::ptr_t tcp_open_channel(LLHost host)
+static LLSocket::ptr_t tcp_open_channel(LLHost host, std::string* error_message)
 {
     static const S32 SOCKS_CONNECT_TIMEOUT_US = 5000000; // 5 seconds for Internet-hosted proxies
+
+    if (error_message)
+    {
+        error_message->clear();
+    }
 
     LLSocket::ptr_t socket = LLSocket::create(NULL, LLSocket::STREAM_TCP);
     if (!socket)
     {
+        if (error_message)
+        {
+            *error_message = "The viewer could not create the TCP socket.";
+        }
         LL_WARNS("Proxy") << "Unable to create SOCKS TCP control socket." << LL_ENDL;
         return socket;
     }
 
-    bool connected = socket->blockingConnect(host, SOCKS_CONNECT_TIMEOUT_US);
+    apr_status_t connect_status = APR_SUCCESS;
+    const bool connected = socket->blockingConnect(host, SOCKS_CONNECT_TIMEOUT_US, &connect_status);
     if (!connected)
     {
+        char status_text[MAX_STRING] = {};
+        apr_strerror(connect_status, status_text, sizeof(status_text));
+
+        if (error_message)
+        {
+            *error_message = llformat("%s (APR %d, OS %d)",
+                                      status_text,
+                                      (S32)connect_status,
+                                      (S32)APR_TO_OS_ERROR(connect_status));
+        }
+
         LL_WARNS("Proxy") << "Unable to connect to SOCKS 5 proxy TCP endpoint "
-                           << host << " within " << (SOCKS_CONNECT_TIMEOUT_US / 1000000)
-                           << " seconds." << LL_ENDL;
+                           << host << ". APR status " << connect_status
+                           << ", OS status " << APR_TO_OS_ERROR(connect_status)
+                           << ": " << status_text << LL_ENDL;
         tcp_close_channel(&socket);
     }
 
