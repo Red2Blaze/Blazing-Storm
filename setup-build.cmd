@@ -11,6 +11,8 @@ rem Optional actions:
 rem     setup-build.cmd configure
 rem     setup-build.cmd build
 rem     setup-build.cmd rebuild
+rem     setup-build.cmd clean-configure
+rem     setup-build.cmd clean-rebuild
 rem     setup-build.cmd shell
 rem
 rem "shell" opens a new cmd.exe with the environment kept active.
@@ -90,6 +92,8 @@ if "%~1"=="" goto :usage
 if /I "%~1"=="configure" goto :configure
 if /I "%~1"=="build" goto :build
 if /I "%~1"=="rebuild" goto :rebuild
+if /I "%~1"=="clean-configure" goto :clean_configure
+if /I "%~1"=="clean-rebuild" goto :clean_rebuild
 if /I "%~1"=="shell" goto :shell
 
 echo Unknown action: %~1
@@ -112,6 +116,17 @@ if errorlevel 1 exit /b %ERRORLEVEL%
 call :build
 exit /b %ERRORLEVEL%
 
+:clean_configure
+echo Cleaning old build/packages and configuring Blazing Storm...
+autobuild configure -A 64 -c ReleaseFS_open -- --clean --chan BlazingStorm -DLL_TESTS:BOOL=FALSE
+exit /b %ERRORLEVEL%
+
+:clean_rebuild
+call :clean_configure
+if errorlevel 1 exit /b %ERRORLEVEL%
+call :build
+exit /b %ERRORLEVEL%
+
 :shell
 echo Opening a build-ready Command Prompt...
 echo.
@@ -124,8 +139,10 @@ echo.
 echo Usage:
 echo   setup-build.cmd configure   Configure CMake / Autobuild
 echo   setup-build.cmd build       Compile using the existing configuration
-echo   setup-build.cmd rebuild     Configure, then build
-echo   setup-build.cmd shell       Open a build-ready Command Prompt
+echo   setup-build.cmd clean-rebuild          Configure, then build
+echo   setup-build.cmd clean-configure  Clear old build/packages, then configure
+echo   setup-build.cmd clean-rebuild    Clear old build/packages, configure, then build
+echo   setup-build.cmd shell            Open a build-ready Command Prompt
 echo.
 echo Recommended:
 echo   setup-build.cmd rebuild
