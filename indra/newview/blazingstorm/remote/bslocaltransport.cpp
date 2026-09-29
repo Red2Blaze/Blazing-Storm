@@ -736,7 +736,7 @@ namespace BlazingStorm
             }
         }
 
-        if (mRole != RemoteRole::None
+        if (mRole != RemoteRole::NoneValue
             || RemoteSession::instance().isActive()
             || RemoteController::instance().isActive())
         {
@@ -832,7 +832,7 @@ namespace BlazingStorm
             mBootstrapControllerId.clear();
             mBootstrapControllerName.clear();
             mBootstrapNonce.clear();
-            mRole = RemoteRole::None;
+            mRole = RemoteRole::NoneValue;
             mLastStatus =
                 "Possession bootstrap timed out before the subject viewer opened its listener.";
             return;
@@ -1027,7 +1027,7 @@ namespace BlazingStorm
             mAcceptor.reset();
         }
 
-        mRole = RemoteRole::None;
+        mRole = RemoteRole::NoneValue;
         mListening = false;
         mConnected = false;
         mPaired = false;
@@ -1134,7 +1134,7 @@ namespace BlazingStorm
                 mAcceptor.reset();
             }
             mListening = false;
-            mRole = RemoteRole::None;
+            mRole = RemoteRole::NoneValue;
         }
     }
 
@@ -1837,6 +1837,6 @@ namespace BlazingStorm
         if (name == "restrictim-on")    return RemoteCommandType::RestrictInstantMessageOn;
         if (name == "restrictim-off")   return RemoteCommandType::RestrictInstantMessageOff;
         if (name == "release")          return RemoteCommandType::EmergencyRelease;
-        return RemoteCommandType::None;
+        return RemoteCommandType::NoneValue;
     }
 }
