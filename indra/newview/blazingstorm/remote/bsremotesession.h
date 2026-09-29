@@ -20,7 +20,7 @@ namespace BlazingStorm
 {
     enum class RemotePermission : std::uint32_t
     {
-        None      = 0,
+        NoneValue = 0,
         Movement  = 1u << 0,
         Chat      = 1u << 1,
         Touch     = 1u << 2,
@@ -37,7 +37,7 @@ namespace BlazingStorm
 
     enum class SubjectRestriction : std::uint32_t
     {
-        None          = 0,
+        NoneValue     = 0,
         Movement      = 1u << 0,
         NearbyChat    = 1u << 1,
         Touch         = 1u << 2,
