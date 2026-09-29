@@ -29,6 +29,7 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "llfloaterreg.h"
+#include "blazingstorm/ui/bsfakelookatfloater.h" // <BlazingStorm>
 #include "blazingstorm/ui/bsremotefloater.h" // <BlazingStorm>
 #include "llviewerfloaterreg.h"
 
@@ -399,6 +400,8 @@ void LLViewerFloaterReg::registerFloaters()
     LLFloaterAboutUtil::registerFloater();
     LLFloaterReg::add("360capture", "floater_360capture.xml", (LLFloaterBuildFunc)&LLFloaterReg::build<LLFloater360Capture>);
     LLFloaterReg::add("block_timers", "floater_fast_timers.xml", (LLFloaterBuildFunc)&LLFloaterReg::build<LLFastTimerView>);
+    LLFloaterReg::add("blazing_storm_fake_look_at", "floater_blazing_storm_fake_look_at.xml",
+        (LLFloaterBuildFunc)&LLFloaterReg::build<BlazingStorm::FakeLookAtFloater>); // <BlazingStorm>
     LLFloaterReg::add("blazing_storm_remote", "floater_blazing_storm_remote.xml",
         (LLFloaterBuildFunc)&LLFloaterReg::build<BlazingStorm::RemoteFloater>); // <BlazingStorm>
     LLFloaterReg::add("about_land", "floater_about_land.xml", (LLFloaterBuildFunc)&LLFloaterReg::build<LLFloaterLand>);
