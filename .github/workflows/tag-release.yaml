@@ -1,11 +1,9 @@
 name: Tag a Build
 
 on:
-  # schedule event triggers always run on the default branch
-  # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule
-  schedule:
-    # run "nightly" builds on default branch every mon/wed/fri
-    - cron: "21 2 * * 2,4,6"     # 2:21am UTC tues/thurs/sat == 7:21pm PDT mon/wed/fri -- see https://crontab.guru/#21_01_*_*_2,4,6
+  # Firestorm's upstream scheduled tag job needs private release credentials.
+  # Blazing Storm keeps this workflow manual-only; automated tester builds are
+  # handled by blazing-latest-windows.yml.
   workflow_dispatch:
     inputs:
       channel:
