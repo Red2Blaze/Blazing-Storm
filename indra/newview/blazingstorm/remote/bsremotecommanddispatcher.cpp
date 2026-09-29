@@ -168,7 +168,7 @@ namespace BlazingStorm
                 }
 
                 auto restrictions = session.subjectRestrictions();
-                SubjectRestriction restriction = SubjectRestriction::None;
+                SubjectRestriction restriction = SubjectRestriction::NoneValue;
                 bool enable = false;
 
                 switch (command.type)
