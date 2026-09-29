@@ -129,7 +129,7 @@ namespace BlazingStorm
         std::unique_ptr<tcp::acceptor> mAcceptor;
         std::unique_ptr<tcp::socket> mSocket;
 
-        RemoteRole mRole = RemoteRole::None;
+        RemoteRole mRole = RemoteRole::NoneValue;
         bool mListening = false;
         bool mConnected = false;
         bool mPaired = false;
