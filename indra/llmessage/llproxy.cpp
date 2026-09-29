@@ -88,7 +88,7 @@ void LLProxy::initSingleton()
  * @param proxy The SOCKS 5 server to connect to.
  * @return SOCKS_OK if successful, otherwise a socks error code from llproxy.h.
  */
-S32 LLProxy::proxyHandshake(LLHost proxy)
+S32 LLProxy::proxyHandshake(LLHost proxy, U16 client_udp_port)
 {
     apr_status_t result;
     const LLSocks5AuthType selected_auth = getSelectedAuthMethod();
@@ -182,9 +182,14 @@ S32 LLProxy::proxyHandshake(LLHost proxy)
     connect_request.reserved = FIELD_RESERVED;
     connect_request.atype    = ADDRESS_IPV4;
     connect_request.address  = htonl(0);
-    connect_request.port     = htons(0);
-    // RFC 1928 requires all-zero address/port when the client does not yet
-    // know which local endpoint it will use for the UDP association.
+    connect_request.port     = htons(client_udp_port);
+    // The proxy startup is intentionally delayed until the viewer messaging
+    // socket exists, so we can provide its real UDP listen port. The address
+    // remains 0.0.0.0 because the OS may choose the outbound interface and a
+    // NAT gateway may change the externally visible address.
+
+    LL_INFOS("Proxy") << "Requesting SOCKS 5 UDP association for local UDP port "
+                       << client_udp_port << LL_ENDL;
 
     result = tcp_blocking_handshake(mProxyControlChannel,
                                     reinterpret_cast<const char*>(&connect_request),
@@ -193,9 +198,27 @@ S32 LLProxy::proxyHandshake(LLHost proxy)
                                     sizeof(connect_reply));
     if (result != APR_SUCCESS)
     {
-        LL_WARNS("Proxy") << "SOCKS UDP ASSOCIATE request failed, error on TCP control channel: " << result << LL_ENDL;
+        char status_text[MAX_STRING] = {};
+        apr_strerror(result, status_text, sizeof(status_text));
+
+        if (APR_STATUS_IS_EOF(result))
+        {
+            mLastSocksError =
+                "The proxy closed the SOCKS control connection when UDP ASSOCIATE was requested. "
+                "This usually means the proxy does not provide SOCKS5 UDP relay support.";
+        }
+        else
+        {
+            mLastSocksError = llformat(
+                "UDP ASSOCIATE failed on the SOCKS control connection: %s (APR %d, OS %d)",
+                status_text,
+                (S32)result,
+                (S32)APR_TO_OS_ERROR(result));
+        }
+
+        LL_WARNS("Proxy") << mLastSocksError << LL_ENDL;
         stopSOCKSProxy();
-        return SOCKS_CONNECT_ERROR;
+        return SOCKS_UDP_FWD_NOT_GRANTED;
     }
 
     if (connect_reply.version != SOCKS_VERSION || connect_reply.reserved != FIELD_RESERVED)
@@ -207,8 +230,10 @@ S32 LLProxy::proxyHandshake(LLHost proxy)
 
     if (connect_reply.reply != REPLY_REQUEST_GRANTED)
     {
-        LL_WARNS("Proxy") << "SOCKS 5 server rejected UDP ASSOCIATE with reply code "
-                           << (S32)connect_reply.reply << LL_ENDL;
+        mLastSocksError = llformat(
+            "The proxy rejected UDP ASSOCIATE with SOCKS5 reply code %d.",
+            (S32)connect_reply.reply);
+        LL_WARNS("Proxy") << mLastSocksError << LL_ENDL;
         stopSOCKSProxy();
         return connect_reply.reply == REPLY_RULESET_FAIL ? SOCKS_NOT_PERMITTED : SOCKS_UDP_FWD_NOT_GRANTED;
     }
@@ -321,7 +346,7 @@ S32 LLProxy::proxyHandshake(LLHost proxy)
  * @param host Socks server to connect to.
  * @return SOCKS_OK if successful, otherwise a SOCKS error code defined in llproxy.h.
  */
-S32 LLProxy::startSOCKSProxy(LLHost host)
+S32 LLProxy::startSOCKSProxy(LLHost host, U16 client_udp_port)
 {
     if (host.isOk())
     {
@@ -342,7 +367,7 @@ S32 LLProxy::startSOCKSProxy(LLHost host)
         return SOCKS_HOST_CONNECT_FAILED;
     }
 
-    S32 status = proxyHandshake(mTCPProxy);
+    S32 status = proxyHandshake(mTCPProxy, client_udp_port);
 
     if (status != SOCKS_OK)
     {

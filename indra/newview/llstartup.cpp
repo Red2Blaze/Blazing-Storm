@@ -820,14 +820,6 @@ bool idle_startup()
             LLNotificationsUtil::add(gViewerWindow->getInitAlert());
         }
 
-        //-------------------------------------------------
-        // Init the SOCKS 5 proxy if the user has configured
-        // one. We need to do this early in case the user
-        // is using SOCKS for HTTP so we get the login
-        // screen and HTTP tables via SOCKS.
-        //-------------------------------------------------
-        LLStartUp::startLLProxy();
-
         gSavedSettings.setS32("LastFeatureVersion", LLFeatureManager::getInstance()->getVersion());
         gSavedSettings.setString("LastGPUString", thisGPU);
 
@@ -1005,6 +997,13 @@ bool idle_startup()
         }
 
         LL_INFOS("AppInit") << "Message System Initialized." << LL_ENDL;
+
+        //-------------------------------------------------
+        // Initialize SOCKS only after the UDP messaging socket exists.
+        // This lets UDP ASSOCIATE advertise the real viewer listen port
+        // instead of the legacy 0.0.0.0:0 endpoint.
+        //-------------------------------------------------
+        LLStartUp::startLLProxy();
 
         // <FS:Techwolf Lupindo> load global xml data
         FSData::instance().startDownload();
@@ -4456,7 +4455,10 @@ bool LLStartUp::startLLProxy()
             LLHost socks_host;
             socks_host.setHostByName(gSavedSettings.getString("Socks5ProxyHost"));
             socks_host.setPort(gSavedSettings.getU32("Socks5ProxyPort"));
-            int status = LLProxy::getInstance()->startSOCKSProxy(socks_host);
+            const U16 client_udp_port = gMessageSystem
+                ? static_cast<U16>(gMessageSystem->getListenPort())
+                : 0;
+            int status = LLProxy::getInstance()->startSOCKSProxy(socks_host, client_udp_port);
 
             if (status != SOCKS_OK)
             {

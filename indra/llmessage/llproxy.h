@@ -257,7 +257,7 @@ public:
     // Safe to call from any thread.
     static void applyProxySettings(CURL* handle);
     // Start a connection to the SOCKS 5 proxy. Call from main thread only.
-    S32 startSOCKSProxy(LLHost host);
+    S32 startSOCKSProxy(LLHost host, U16 client_udp_port = 0);
 
     // Disconnect and clean up any connection to the SOCKS 5 proxy. Call from main thread only.
     void stopSOCKSProxy();
@@ -285,7 +285,7 @@ private:
     ###########################################################################################*/
 
     // Perform a SOCKS 5 authentication and UDP association with the proxy server.
-    S32 proxyHandshake(LLHost proxy);
+    S32 proxyHandshake(LLHost proxy, U16 client_udp_port);
 
     // Get the currently selected auth method.
     LLSocks5AuthType getSelectedAuthMethod() const;

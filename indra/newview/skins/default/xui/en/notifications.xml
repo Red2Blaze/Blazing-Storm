@@ -10606,7 +10606,11 @@ Click and drag anywhere on the world to rotate your view
    icon="alertmodal.tga"
    name="SOCKS_UDP_FWD_NOT_GRANTED"
    type="alertmodal">
-	The SOCKS 5 proxy "[HOST]:[PORT]" refused the UDP associate request.
+	The SOCKS 5 proxy "[HOST]:[PORT]" could not establish a UDP relay.
+
+Reason: [REASON]
+
+Second Life simulator traffic uses UDP, so the viewer will not silently bypass the proxy.
 	<tag>fail</tag>
    <usetemplate
      name="okbutton"
