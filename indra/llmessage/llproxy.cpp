@@ -694,10 +694,21 @@ static apr_status_t tcp_blocking_receive(LLSocket::ptr_t handle, char* datain, a
  */
 static LLSocket::ptr_t tcp_open_channel(LLHost host)
 {
+    static const S32 SOCKS_CONNECT_TIMEOUT_US = 5000000; // 5 seconds for Internet-hosted proxies
+
     LLSocket::ptr_t socket = LLSocket::create(NULL, LLSocket::STREAM_TCP);
-    bool connected = socket->blockingConnect(host);
+    if (!socket)
+    {
+        LL_WARNS("Proxy") << "Unable to create SOCKS TCP control socket." << LL_ENDL;
+        return socket;
+    }
+
+    bool connected = socket->blockingConnect(host, SOCKS_CONNECT_TIMEOUT_US);
     if (!connected)
     {
+        LL_WARNS("Proxy") << "Unable to connect to SOCKS 5 proxy TCP endpoint "
+                           << host << " within " << (SOCKS_CONNECT_TIMEOUT_US / 1000000)
+                           << " seconds." << LL_ENDL;
         tcp_close_channel(&socket);
     }
 

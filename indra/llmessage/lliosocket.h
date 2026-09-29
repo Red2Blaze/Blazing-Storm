@@ -127,9 +127,10 @@ public:
      * @brief Perform a blocking connect to a host. Do not use in production.
      *
      * @param host The host to connect this socket to.
+     * @param timeout Timeout in microseconds. Defaults to the legacy 1ms value.
      * @return Returns true if the connect was successful.
      */
-    bool blockingConnect(const LLHost& host);
+    bool blockingConnect(const LLHost& host, S32 timeout = 1000);
 
     /**
      * @brief Get the type of socket

@@ -215,7 +215,7 @@ LLSocket::ptr_t LLSocket::create(apr_socket_t* socket, apr_pool_t* pool)
 }
 
 
-bool LLSocket::blockingConnect(const LLHost& host)
+bool LLSocket::blockingConnect(const LLHost& host, S32 timeout)
 {
     // <FS:ND> Prevent log spam
     if( !host.isOk() )
@@ -236,7 +236,7 @@ bool LLSocket::blockingConnect(const LLHost& host)
     {
         return false;
     }
-    setBlocking(1000);
+    setBlocking(timeout);
     ll_debug_socket("Blocking connect", mSocket);
     if(ll_apr_warn_status(apr_socket_connect(mSocket, sa))) return false;
     setNonBlocking();
