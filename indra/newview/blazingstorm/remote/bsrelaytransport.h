@@ -55,13 +55,9 @@ namespace BlazingStorm
         static RelayTransport& instance();
         ~RelayTransport();
 
-        // Subject-only broker call. The create key never goes to the Controller
-        // and is never placed in a URL.
+        // Creates a short-lived relay session. v0.2.1 broker session creation
+        // is anonymous; possession consent is enforced by the Subject viewer.
         bool createSession(const std::string& broker_base_url,
-                           const std::string& relay_create_key,
-                           const std::string& controller_id,
-                           const std::string& controller_name,
-                           const std::string& nonce,
                            const std::string& path_override = {});
 
         // Exchanges a short-lived signed session ticket for a Web PubSub
