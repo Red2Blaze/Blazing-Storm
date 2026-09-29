@@ -90,11 +90,17 @@ cd /d "%PROJECT_DIR%"
 
 if "%~1"=="" goto :usage
 if /I "%~1"=="configure" goto :configure
+if /I "%~1"=="-configure" goto :configure
 if /I "%~1"=="build" goto :build
+if /I "%~1"=="-build" goto :build
 if /I "%~1"=="rebuild" goto :rebuild
+if /I "%~1"=="-rebuild" goto :rebuild
 if /I "%~1"=="clean-configure" goto :clean_configure
+if /I "%~1"=="-clean-configure" goto :clean_configure
 if /I "%~1"=="clean-rebuild" goto :clean_rebuild
+if /I "%~1"=="-clean-rebuild" goto :clean_rebuild
 if /I "%~1"=="shell" goto :shell
+if /I "%~1"=="-shell" goto :shell
 
 echo Unknown action: %~1
 echo.
@@ -139,12 +145,12 @@ echo.
 echo Usage:
 echo   setup-build.cmd configure   Configure CMake / Autobuild
 echo   setup-build.cmd build       Compile using the existing configuration
-echo   setup-build.cmd clean-rebuild          Configure, then build
+echo   setup-build.cmd rebuild          Configure, then build
 echo   setup-build.cmd clean-configure  Clear old build/packages, then configure
 echo   setup-build.cmd clean-rebuild    Clear old build/packages, configure, then build
 echo   setup-build.cmd shell            Open a build-ready Command Prompt
 echo.
-echo Recommended:
-echo   setup-build.cmd rebuild
+echo Recommended when dependencies changed:
+echo   setup-build.cmd clean-rebuild
 echo.
 exit /b 0
