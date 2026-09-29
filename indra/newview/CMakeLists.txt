@@ -87,6 +87,7 @@ endif ()
 
 set(viewer_SOURCE_FILES
 # <Add FS includes below this line>
+    blazingstorm/lookat/bsfakelookat.cpp
     blazingstorm/remote/bsremotesession.cpp
     blazingstorm/remote/bsremoteactions.cpp
     blazingstorm/remote/bsdebugcommands.cpp
@@ -101,6 +102,7 @@ set(viewer_SOURCE_FILES
     blazingstorm/remote/bsrequestactions.cpp
     blazingstorm/remote/bsworldinteraction.cpp
     blazingstorm/remote/bsremotefeatures.cpp
+    blazingstorm/ui/bsfakelookatfloater.cpp
     blazingstorm/ui/bsremotefloater.cpp
     alfloaterregiontracker.cpp
     animationexplorer.cpp
@@ -968,6 +970,7 @@ set(viewer_HEADER_FILES
     ViewerInstall.cmake
 
 # <Add FS includes below this line>
+    blazingstorm/lookat/bsfakelookat.h
     blazingstorm/remote/bsremotesession.h
     blazingstorm/remote/bsremoteactions.h
     blazingstorm/remote/bsdebugcommands.h
@@ -984,6 +987,7 @@ set(viewer_HEADER_FILES
     blazingstorm/remote/bsrequestactions.h
     blazingstorm/remote/bsworldinteraction.h
     blazingstorm/remote/bsremotefeatures.h
+    blazingstorm/ui/bsfakelookatfloater.h
     blazingstorm/ui/bsremotefloater.h
     alfloaterregiontracker.h
     animationexplorer.h
