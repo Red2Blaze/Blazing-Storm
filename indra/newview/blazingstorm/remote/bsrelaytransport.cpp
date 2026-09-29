@@ -548,7 +548,7 @@ namespace
 #ifdef LL_WINDOWS
     bool addWindowsRootCertificates(ssl::context& context)
     {
-        HCERTSTORE windows_store = CertOpenSystemStoreA(nullptr, "ROOT");
+        HCERTSTORE windows_store = CertOpenSystemStoreA(0, "ROOT");
         if (!windows_store) return false;
 
         X509_STORE* openssl_store =
