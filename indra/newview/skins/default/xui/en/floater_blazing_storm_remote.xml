@@ -34,7 +34,8 @@
    left="16"
    top="68"
    width="92"
-   height="18">
+   height="18"
+   follows="left|top">
     Relay broker:
   </text>
 
@@ -55,7 +56,8 @@
    left="16"
    top="100"
    width="92"
-   height="18">
+   height="18"
+   follows="left|top">
     Subject key:
   </text>
 
