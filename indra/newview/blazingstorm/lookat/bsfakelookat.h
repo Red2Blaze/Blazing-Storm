@@ -10,7 +10,7 @@
 #include "llframetimer.h"
 #include "llhudeffectlookat.h"
 #include "llpointer.h"
-#include "llvector3.h"
+#include "v3math.h"
 
 #include <vector>
 
