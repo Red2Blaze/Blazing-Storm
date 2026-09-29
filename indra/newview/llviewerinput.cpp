@@ -495,7 +495,7 @@ bool agent_toggle_fly( EKeystate s )
 
     if (BlazingStorm::ControllerInput::routeMovement(
             BlazingStorm::RemoteCommandType::ToggleFly,
-            BlazingStorm::RemoteCommandType::None,
+            BlazingStorm::RemoteCommandType::NoneValue,
             KEYSTATE_DOWN == s,
             KEYSTATE_UP == s))
     {
