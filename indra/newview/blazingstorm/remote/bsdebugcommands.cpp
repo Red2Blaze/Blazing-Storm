@@ -199,7 +199,7 @@ namespace BlazingStorm
             std::string remote_action;
             input >> remote_action;
 
-            RemoteCommandType type = RemoteCommandType::None;
+            RemoteCommandType type = RemoteCommandType::NoneValue;
             std::string target_id;
             std::string message;
 
