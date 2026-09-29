@@ -13,14 +13,14 @@ namespace BlazingStorm
 {
     enum class RemoteRole
     {
-        None,
+        NoneValue,
         Host,
         Controller
     };
 
     enum class RemoteCommandType
     {
-        None,
+        NoneValue,
         MoveForward,
         MoveBackward,
         StrafeLeft,
@@ -72,7 +72,7 @@ namespace BlazingStorm
 
     struct RemoteCommand
     {
-        RemoteCommandType type = RemoteCommandType::None;
+        RemoteCommandType type = RemoteCommandType::NoneValue;
         std::string targetId;
         std::string text;
         std::uint64_t sequence = 0;
