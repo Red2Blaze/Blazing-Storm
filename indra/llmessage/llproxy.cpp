@@ -53,12 +53,12 @@ LLProxy::LLProxy():
         mProxyMutex(),
         mUDPProxy(),
         mTCPProxy(),
+        mLastSocksError(),
         mHTTPProxy(),
         mProxyType(LLPROXY_SOCKS),
         mAuthMethodSelected(METHOD_NOAUTH),
         mSocksUsername(),
-        mSocksPassword(),
-        mLastSocksError()
+        mSocksPassword()
 {}
 
 LLProxy::~LLProxy()
