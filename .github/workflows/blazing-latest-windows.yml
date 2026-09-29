@@ -342,6 +342,7 @@ jobs:
           --package
           --chan BlazingStorm
           -DLL_TESTS:BOOL=FALSE
+          -DNDOF:BOOL=FALSE
 
       - name: Build Linux package
         shell: bash
@@ -457,6 +458,7 @@ jobs:
           --chan BlazingStorm-AVX2
           --avx2
           -DLL_TESTS:BOOL=FALSE
+          -DNDOF:BOOL=FALSE
 
       - name: Build Linux package
         shell: bash
