@@ -715,6 +715,7 @@ namespace
     {
         if (!override_path.empty()) return {override_path};
         return {
+            "/api/sessions",
             "/api/session/create",
             "/api/sessions/create",
             "/api/create-session",
@@ -722,7 +723,6 @@ namespace
             "/api/relay/create-session",
             "/api/relay/session/create",
             "/api/session",
-            "/api/sessions",
             "/api/relay/session",
             "/api/relay/create"
         };
@@ -741,6 +741,7 @@ namespace
         const std::string camel = subject ? "Subject" : "Controller";
 
         return {
+            "/api/negotiate",
             "/api/negotiate/" + role_name,
             "/api/negotiate-" + role_name,
             "/api/negotiate" + camel,
@@ -782,7 +783,7 @@ namespace
         event.subjectTicket = firstJsonString(
             body, {"subjectTicket", "subjectToken", "subjectKey"});
         event.controllerTicket = firstJsonString(
-            body, {"controllerTicket", "controllerToken", "controllerKey"});
+            body, {"controllerInvite", "controllerTicket", "controllerToken", "controllerKey"});
 
         std::string nested;
         if (event.subjectTicket.empty()
@@ -1354,14 +1355,9 @@ namespace BlazingStorm
 
     bool RelayTransport::createSession(
         const std::string& broker_base_url,
-        const std::string& relay_create_key,
-        const std::string& controller_id,
-        const std::string& controller_name,
-        const std::string& nonce,
         const std::string& path_override)
     {
-        if (broker_base_url.empty() || relay_create_key.empty()
-            || controller_id.empty() || nonce.empty())
+        if (broker_base_url.empty())
         {
             return false;
         }
@@ -1370,25 +1366,13 @@ namespace BlazingStorm
         mPubSub.reset();
 
         return startBrokerTask(
-            [this, broker_base_url, relay_create_key, controller_id,
-             controller_name, nonce, path_override](std::uint64_t generation)
+            [this, broker_base_url, path_override](std::uint64_t generation)
             {
-                const std::string body =
-                    "{\"protocol\":1,\"controllerId\":\""
-                    + jsonEscape(controller_id)
-                    + "\",\"controllerName\":\""
-                    + jsonEscape(controller_name)
-                    + "\",\"nonce\":\""
-                    + jsonEscape(nonce)
-                    + "\",\"createKey\":\""
-                    + jsonEscape(relay_create_key)
-                    + "\",\"relayCreateKey\":\""
-                    + jsonEscape(relay_create_key) + "\"}";
-
-                const std::vector<std::pair<std::string, std::string>> headers = {
-                    {"X-Relay-Create-Key", relay_create_key},
-                    {"X-Blazing-Relay-Create-Key", relay_create_key}
-                };
+                // Relay server v0.2.1 creates anonymous short-lived sessions.
+                // The Subject's consent/whitelist remains the authorization
+                // boundary; no permanent viewer secret is sent to the broker.
+                const std::string body = "{}";
+                const std::vector<std::pair<std::string, std::string>> headers;
 
                 for (const auto& path : createPaths(path_override))
                 {
@@ -1428,7 +1412,7 @@ namespace BlazingStorm
                         event.type = RelayEventType::Error;
                         event.detail =
                             "Broker create-session response did not contain "
-                            "sessionId, subject ticket, and controller ticket.";
+                            "sessionId, subjectTicket, and controllerInvite.";
                     }
                     pushEvent(generation, std::move(event));
                     return;
@@ -1438,7 +1422,7 @@ namespace BlazingStorm
                 event.type = RelayEventType::Error;
                 event.detail =
                     "Could not find the relay create-session Function route. "
-                    "Set BlazingStormRelayCreatePath if the deployed route is custom.";
+                    "Expected v0.2.1 POST /api/sessions.";
                 pushEvent(generation, std::move(event));
             });
     }
