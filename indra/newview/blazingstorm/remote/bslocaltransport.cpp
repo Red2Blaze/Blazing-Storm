@@ -390,6 +390,15 @@ namespace BlazingStorm
                     continue;
 
                 mRelaySessionId = event.sessionId;
+                if (mRelaySessionId.empty())
+                {
+                    // Relay server v0.2.1 does not require returning a public
+                    // session ID. Keep a local correlation ID for the SL IM
+                    // bootstrap while the signed tickets carry server state.
+                    LLUUID local_session_id;
+                    local_session_id.generate();
+                    mRelaySessionId = local_session_id.asString();
+                }
                 mRelaySubjectTicket = event.subjectTicket;
                 mRelayControllerTicket = event.controllerTicket;
                 mRelayBrokerPath = event.matchedPath;
