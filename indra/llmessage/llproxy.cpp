@@ -43,8 +43,9 @@ bool LLProxy::sUDPProxyEnabled = false;
 LLProxy* LLProxy::sProxyInstance = NULL;
 
 // Some helpful TCP static functions.
-static apr_status_t tcp_blocking_handshake(LLSocket::ptr_t handle, char * dataout, apr_size_t outlen, char * datain, apr_size_t maxinlen); // Do a TCP data handshake
-static LLSocket::ptr_t tcp_open_channel(LLHost host); // Open a TCP channel to a given host
+static apr_status_t tcp_blocking_handshake(LLSocket::ptr_t handle, const char* dataout, apr_size_t outlen, char* datain, apr_size_t inlen); // Do a TCP data handshake
+static apr_status_t tcp_blocking_receive(LLSocket::ptr_t handle, char* datain, apr_size_t inlen); // Receive an exact amount of control-channel data
+static LLSocket::ptr_t tcp_open_channel(LLHost host, std::string* error_message); // Open a TCP channel to a given host
 static void tcp_close_channel(LLSocket::ptr_t* handle_ptr); // Close an open TCP channel
 
 LLProxy::LLProxy():
@@ -52,6 +53,7 @@ LLProxy::LLProxy():
         mProxyMutex(),
         mUDPProxy(),
         mTCPProxy(),
+        mLastSocksError(),
         mHTTPProxy(),
         mProxyType(LLPROXY_SOCKS),
         mAuthMethodSelected(METHOD_NOAUTH),
@@ -86,26 +88,35 @@ void LLProxy::initSingleton()
  * @param proxy The SOCKS 5 server to connect to.
  * @return SOCKS_OK if successful, otherwise a socks error code from llproxy.h.
  */
-S32 LLProxy::proxyHandshake(LLHost proxy)
+S32 LLProxy::proxyHandshake(LLHost proxy, U16 client_udp_port)
 {
-    S32 result;
+    apr_status_t result;
+    const LLSocks5AuthType selected_auth = getSelectedAuthMethod();
 
     /* SOCKS 5 Auth request */
-    socks_auth_request_t  socks_auth_request;
+    socks_auth_request_t socks_auth_request;
     socks_auth_response_t socks_auth_response;
 
-    socks_auth_request.version      = SOCKS_VERSION;                // SOCKS version 5
-    socks_auth_request.num_methods  = 1;                            // Sending 1 method.
-    socks_auth_request.methods      = getSelectedAuthMethod();      // Send only the selected method.
+    socks_auth_request.version     = SOCKS_VERSION;
+    socks_auth_request.num_methods = 1;
+    socks_auth_request.methods     = selected_auth;
 
     result = tcp_blocking_handshake(mProxyControlChannel,
-                                    static_cast<char*>(static_cast<void*>(&socks_auth_request)),
+                                    reinterpret_cast<const char*>(&socks_auth_request),
                                     sizeof(socks_auth_request),
-                                    static_cast<char*>(static_cast<void*>(&socks_auth_response)),
+                                    reinterpret_cast<char*>(&socks_auth_response),
                                     sizeof(socks_auth_response));
     if (result != APR_SUCCESS)
     {
-        LL_WARNS("Proxy") << "SOCKS authentication request failed, error on TCP control channel : " << result << LL_ENDL;
+        LL_WARNS("Proxy") << "SOCKS authentication request failed, error on TCP control channel: " << result << LL_ENDL;
+        stopSOCKSProxy();
+        return SOCKS_CONNECT_ERROR;
+    }
+
+    if (socks_auth_response.version != SOCKS_VERSION)
+    {
+        LL_WARNS("Proxy") << "SOCKS server returned unexpected protocol version "
+                           << (S32)socks_auth_response.version << LL_ENDL;
         stopSOCKSProxy();
         return SOCKS_CONNECT_ERROR;
     }
@@ -117,18 +128,25 @@ S32 LLProxy::proxyHandshake(LLHost proxy)
         return SOCKS_NOT_ACCEPTABLE;
     }
 
-    /* SOCKS 5 USERNAME/PASSWORD authentication */
-    if (socks_auth_response.method == METHOD_PASSWORD)
+    if (socks_auth_response.method != selected_auth)
     {
-        // The server has requested a username/password combination
+        LL_WARNS("Proxy") << "SOCKS 5 server selected an authentication method we did not offer: "
+                           << (S32)socks_auth_response.method << LL_ENDL;
+        stopSOCKSProxy();
+        return SOCKS_NOT_ACCEPTABLE;
+    }
+
+    /* SOCKS 5 USERNAME/PASSWORD authentication */
+    if (selected_auth == METHOD_PASSWORD)
+    {
         std::string socks_username(getSocksUser());
         std::string socks_password(getSocksPwd());
-        U32 request_size = static_cast<S32>(socks_username.size() + socks_password.size() + 3);
-        char * password_auth = new char[request_size];
+        const U32 request_size = static_cast<U32>(socks_username.size() + socks_password.size() + 3);
+        char* password_auth = new char[request_size];
         password_auth[0] = 0x01;
-        password_auth[1] = (char)(socks_username.size());
+        password_auth[1] = static_cast<char>(socks_username.size());
         memcpy(&password_auth[2], socks_username.c_str(), socks_username.size());
-        password_auth[socks_username.size() + 2] = (char)(socks_password.size());
+        password_auth[socks_username.size() + 2] = static_cast<char>(socks_password.size());
         memcpy(&password_auth[socks_username.size() + 3], socks_password.c_str(), socks_password.size());
 
         authmethod_password_reply_t password_reply;
@@ -136,63 +154,184 @@ S32 LLProxy::proxyHandshake(LLHost proxy)
         result = tcp_blocking_handshake(mProxyControlChannel,
                                         password_auth,
                                         request_size,
-                                        static_cast<char*>(static_cast<void*>(&password_reply)),
+                                        reinterpret_cast<char*>(&password_reply),
                                         sizeof(password_reply));
         delete[] password_auth;
 
         if (result != APR_SUCCESS)
         {
-            LL_WARNS("Proxy") << "SOCKS authentication failed, error on TCP control channel : " << result << LL_ENDL;
+            LL_WARNS("Proxy") << "SOCKS authentication failed, error on TCP control channel: " << result << LL_ENDL;
             stopSOCKSProxy();
             return SOCKS_CONNECT_ERROR;
         }
 
-        if (password_reply.status != AUTH_SUCCESS)
+        if (password_reply.version != 0x01 || password_reply.status != AUTH_SUCCESS)
         {
-            LL_WARNS("Proxy") << "SOCKS authentication failed" << LL_ENDL;
+            LL_WARNS("Proxy") << "SOCKS username/password authentication failed." << LL_ENDL;
             stopSOCKSProxy();
             return SOCKS_AUTH_FAIL;
         }
     }
 
-    /* SOCKS5 connect request */
-
-    socks_command_request_t  connect_request;
+    /* SOCKS5 UDP ASSOCIATE request */
+    socks_command_request_t connect_request;
     socks_command_response_t connect_reply;
 
-    connect_request.version     = SOCKS_VERSION;         // SOCKS V5
-    connect_request.command     = COMMAND_UDP_ASSOCIATE; // Associate UDP
-    connect_request.reserved    = FIELD_RESERVED;
-    connect_request.atype       = ADDRESS_IPV4;
-    connect_request.address     = htonl(0); // 0.0.0.0
-    connect_request.port        = htons(0); // 0
-    // "If the client is not in possession of the information at the time of the UDP ASSOCIATE,
-    //  the client MUST use a port number and address of all zeros. RFC 1928"
+    connect_request.version  = SOCKS_VERSION;
+    connect_request.command  = COMMAND_UDP_ASSOCIATE;
+    connect_request.reserved = FIELD_RESERVED;
+    connect_request.atype    = ADDRESS_IPV4;
+    connect_request.address  = htonl(0);
+    connect_request.port     = htons(client_udp_port);
+    // The proxy startup is intentionally delayed until the viewer messaging
+    // socket exists, so we can provide its real UDP listen port. The address
+    // remains 0.0.0.0 because the OS may choose the outbound interface and a
+    // NAT gateway may change the externally visible address.
+
+    LL_INFOS("Proxy") << "Requesting SOCKS 5 UDP association for local UDP port "
+                       << client_udp_port << LL_ENDL;
 
     result = tcp_blocking_handshake(mProxyControlChannel,
-                                    static_cast<char*>(static_cast<void*>(&connect_request)),
+                                    reinterpret_cast<const char*>(&connect_request),
                                     sizeof(connect_request),
-                                    static_cast<char*>(static_cast<void*>(&connect_reply)),
+                                    reinterpret_cast<char*>(&connect_reply),
                                     sizeof(connect_reply));
     if (result != APR_SUCCESS)
     {
-        LL_WARNS("Proxy") << "SOCKS connect request failed, error on TCP control channel : " << result << LL_ENDL;
+        char status_text[MAX_STRING] = {};
+        apr_strerror(result, status_text, sizeof(status_text));
+
+        if (APR_STATUS_IS_EOF(result))
+        {
+            mLastSocksError =
+                "The proxy closed the SOCKS control connection when UDP ASSOCIATE was requested. "
+                "This usually means the proxy does not provide SOCKS5 UDP relay support.";
+        }
+        else
+        {
+            mLastSocksError = llformat(
+                "UDP ASSOCIATE failed on the SOCKS control connection: %s (APR %d, OS %d)",
+                status_text,
+                (S32)result,
+                (S32)APR_TO_OS_ERROR(result));
+        }
+
+        LL_WARNS("Proxy") << mLastSocksError << LL_ENDL;
+        stopSOCKSProxy();
+        return SOCKS_UDP_FWD_NOT_GRANTED;
+    }
+
+    if (connect_reply.version != SOCKS_VERSION || connect_reply.reserved != FIELD_RESERVED)
+    {
+        LL_WARNS("Proxy") << "SOCKS UDP ASSOCIATE returned an invalid reply header." << LL_ENDL;
         stopSOCKSProxy();
         return SOCKS_CONNECT_ERROR;
     }
 
     if (connect_reply.reply != REPLY_REQUEST_GRANTED)
     {
-        LL_WARNS("Proxy") << "Connection to SOCKS 5 server failed, UDP forward request not granted" << LL_ENDL;
+        mLastSocksError = llformat(
+            "The proxy rejected UDP ASSOCIATE with SOCKS5 reply code %d.",
+            (S32)connect_reply.reply);
+        LL_WARNS("Proxy") << mLastSocksError << LL_ENDL;
+        stopSOCKSProxy();
+        return connect_reply.reply == REPLY_RULESET_FAIL ? SOCKS_NOT_PERMITTED : SOCKS_UDP_FWD_NOT_GRANTED;
+    }
+
+    // RFC 1928 says BND.ADDR/BND.PORT identify the UDP relay endpoint.
+    // Older viewer code ignored BND.ADDR and always used the TCP proxy IP,
+    // which breaks proxies that place their UDP relay on a different address.
+    switch (connect_reply.atype)
+    {
+        case ADDRESS_IPV4:
+        {
+            U32 relay_address = 0;
+            result = tcp_blocking_receive(mProxyControlChannel,
+                                          reinterpret_cast<char*>(&relay_address),
+                                          sizeof(relay_address));
+            if (result != APR_SUCCESS)
+            {
+                LL_WARNS("Proxy") << "Failed reading SOCKS UDP relay IPv4 address: " << result << LL_ENDL;
+                stopSOCKSProxy();
+                return SOCKS_CONNECT_ERROR;
+            }
+
+            // Some SOCKS implementations return 0.0.0.0 to mean the control
+            // connection's server address. Preserve compatibility with them.
+            mUDPProxy.setAddress(relay_address != 0 ? relay_address : proxy.getAddress());
+            break;
+        }
+
+        case ADDRESS_HOSTNAME:
+        {
+            U8 hostname_length = 0;
+            result = tcp_blocking_receive(mProxyControlChannel,
+                                          reinterpret_cast<char*>(&hostname_length),
+                                          sizeof(hostname_length));
+            if (result != APR_SUCCESS || hostname_length == 0)
+            {
+                LL_WARNS("Proxy") << "Failed reading SOCKS UDP relay hostname length." << LL_ENDL;
+                stopSOCKSProxy();
+                return SOCKS_CONNECT_ERROR;
+            }
+
+            char relay_hostname[MAXHOSTNAMELEN] = {};
+            result = tcp_blocking_receive(mProxyControlChannel,
+                                          relay_hostname,
+                                          hostname_length);
+            if (result != APR_SUCCESS)
+            {
+                LL_WARNS("Proxy") << "Failed reading SOCKS UDP relay hostname: " << result << LL_ENDL;
+                stopSOCKSProxy();
+                return SOCKS_CONNECT_ERROR;
+            }
+            relay_hostname[hostname_length] = '\0';
+
+            LLHost relay_host;
+            if (!relay_host.setHostByName(relay_hostname))
+            {
+                LL_WARNS("Proxy") << "Unable to resolve SOCKS UDP relay hostname: "
+                                   << relay_hostname << LL_ENDL;
+                stopSOCKSProxy();
+                return SOCKS_INVALID_HOST;
+            }
+            mUDPProxy.setAddress(relay_host.getAddress());
+            break;
+        }
+
+        case ADDRESS_IPV6:
+            // LLHost and the viewer UDP stack are currently IPv4-only.
+            LL_WARNS("Proxy") << "SOCKS server returned an IPv6 UDP relay address, which this viewer network stack cannot represent yet." << LL_ENDL;
+            stopSOCKSProxy();
+            return SOCKS_UDP_FWD_NOT_GRANTED;
+
+        default:
+            LL_WARNS("Proxy") << "SOCKS server returned an unknown UDP relay address type: "
+                               << (S32)connect_reply.atype << LL_ENDL;
+            stopSOCKSProxy();
+            return SOCKS_UDP_FWD_NOT_GRANTED;
+    }
+
+    U16 relay_port = 0;
+    result = tcp_blocking_receive(mProxyControlChannel,
+                                  reinterpret_cast<char*>(&relay_port),
+                                  sizeof(relay_port));
+    if (result != APR_SUCCESS)
+    {
+        LL_WARNS("Proxy") << "Failed reading SOCKS UDP relay port: " << result << LL_ENDL;
+        stopSOCKSProxy();
+        return SOCKS_CONNECT_ERROR;
+    }
+
+    mUDPProxy.setPort(ntohs(relay_port));
+    if (!mUDPProxy.isOk())
+    {
+        LL_WARNS("Proxy") << "SOCKS server returned an unusable UDP relay endpoint." << LL_ENDL;
         stopSOCKSProxy();
         return SOCKS_UDP_FWD_NOT_GRANTED;
     }
 
-    mUDPProxy.setPort(ntohs(connect_reply.port)); // reply port is in network byte order
-    mUDPProxy.setAddress(proxy.getAddress());
-    // The connection was successful. We now have the UDP port to send requests that need forwarding to.
-    LL_INFOS("Proxy") << "SOCKS 5 UDP proxy connected on " << mUDPProxy << LL_ENDL;
-
+    LL_INFOS("Proxy") << "SOCKS 5 UDP relay connected on " << mUDPProxy << LL_ENDL;
     return SOCKS_OK;
 }
 
@@ -207,7 +346,7 @@ S32 LLProxy::proxyHandshake(LLHost proxy)
  * @param host Socks server to connect to.
  * @return SOCKS_OK if successful, otherwise a SOCKS error code defined in llproxy.h.
  */
-S32 LLProxy::startSOCKSProxy(LLHost host)
+S32 LLProxy::startSOCKSProxy(LLHost host, U16 client_udp_port)
 {
     if (host.isOk())
     {
@@ -220,14 +359,15 @@ S32 LLProxy::startSOCKSProxy(LLHost host)
 
     // Close any running SOCKS connection.
     stopSOCKSProxy();
+    mLastSocksError.clear();
 
-    mProxyControlChannel = tcp_open_channel(mTCPProxy);
+    mProxyControlChannel = tcp_open_channel(mTCPProxy, &mLastSocksError);
     if (!mProxyControlChannel)
     {
         return SOCKS_HOST_CONNECT_FAILED;
     }
 
-    S32 status = proxyHandshake(mTCPProxy);
+    S32 status = proxyHandshake(mTCPProxy, client_udp_port);
 
     if (status != SOCKS_OK)
     {
@@ -447,7 +587,8 @@ void LLProxy::applyProxySettings(CURL* handle)
 
             if (sProxyInstance->mProxyType == LLPROXY_SOCKS)
             {
-                LLCore::LLHttp::check_curl_code(curl_easy_setopt(handle, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5), CURLOPT_PROXYTYPE);
+                // Resolve destination hostnames through the SOCKS server as well as proxying the connection.
+                LLCore::LLHttp::check_curl_code(curl_easy_setopt(handle, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5_HOSTNAME), CURLOPT_PROXYTYPE);
                 if (sProxyInstance->mAuthMethodSelected == METHOD_PASSWORD)
                 {
                     std::string auth_string = sProxyInstance->mSocksUsername + ":" + sProxyInstance->mSocksPassword;
@@ -475,52 +616,98 @@ void LLProxy::applyProxySettings(CURL* handle)
  * @param maxinlen      Maximum possible length of received data.  Short reads are allowed.
  * @return              Indicates APR status code of exchange. APR_SUCCESS if exchange was successful, -1 if invalid data length was received.
  */
-static apr_status_t tcp_blocking_handshake(LLSocket::ptr_t handle, char * dataout, apr_size_t outlen, char * datain, apr_size_t maxinlen)
+static apr_status_t tcp_send_exact(apr_socket_t* apr_socket, const char* dataout, apr_size_t outlen)
 {
-    apr_socket_t* apr_socket = handle->getSocket();
-    apr_status_t rv = APR_SUCCESS;
-
-    apr_size_t expected_len = outlen;
-
-    handle->setBlocking(100000); // 100ms, 100000us. Should be sufficient for localhost, nearby network
-
-    rv = apr_socket_send(apr_socket, dataout, &outlen);
-    if (APR_SUCCESS != rv)
+    apr_size_t sent = 0;
+    while (sent < outlen)
     {
-        char buf[MAX_STRING];
-        LL_WARNS("Proxy") << "Error sending data to proxy control channel, status: " << rv << " " << apr_strerror(rv, buf, MAX_STRING) << LL_ENDL;
-        ll_apr_warn_status(rv);
-    }
-    else if (expected_len != outlen)
-    {
-        LL_WARNS("Proxy") << "Incorrect data length sent. Expected: " << expected_len <<
-                " Sent: " << outlen << LL_ENDL;
-        rv = -1;
-    }
-
-    // ms_sleep(1); // <FS:Beq/> remove the unnecessary sleep.
-
-    if (APR_SUCCESS == rv)
-    {
-        expected_len = maxinlen;
-        rv = apr_socket_recv(apr_socket, datain, &maxinlen);
+        apr_size_t chunk = outlen - sent;
+        const apr_status_t rv = apr_socket_send(apr_socket, dataout + sent, &chunk);
         if (rv != APR_SUCCESS)
         {
-            // if rv == 70060 it's WSAETIMEDOUT
-            char buf[MAX_STRING];
-            LL_WARNS("Proxy") << "Error receiving data from proxy control channel, status: " << rv << " " << apr_strerror(rv, buf, MAX_STRING) << LL_ENDL;
-            ll_apr_warn_status(rv);
+            return rv;
         }
-        else if (expected_len < maxinlen)
+        if (chunk == 0)
         {
-            LL_WARNS("Proxy") << "Incorrect data length received. Expected: " << expected_len <<
-                    " Received: " << maxinlen << LL_ENDL;
-            rv = -1;
+            return APR_EOF;
         }
+        sent += chunk;
+    }
+    return APR_SUCCESS;
+}
+
+static apr_status_t tcp_receive_exact(apr_socket_t* apr_socket, char* datain, apr_size_t inlen)
+{
+    apr_size_t received = 0;
+    while (received < inlen)
+    {
+        apr_size_t chunk = inlen - received;
+        const apr_status_t rv = apr_socket_recv(apr_socket, datain + received, &chunk);
+        if (rv != APR_SUCCESS)
+        {
+            return rv;
+        }
+        if (chunk == 0)
+        {
+            return APR_EOF;
+        }
+        received += chunk;
+    }
+    return APR_SUCCESS;
+}
+
+/**
+ * @brief Send one SOCKS control message and receive an exact-sized reply.
+ *
+ * SOCKS servers can be remote, and TCP is allowed to split small writes and
+ * reads. Use a practical timeout and loop until the full protocol message has
+ * been transferred instead of assuming one send/recv call completes it.
+ */
+static apr_status_t tcp_blocking_handshake(LLSocket::ptr_t handle,
+                                           const char* dataout,
+                                           apr_size_t outlen,
+                                           char* datain,
+                                           apr_size_t inlen)
+{
+    apr_socket_t* apr_socket = handle->getSocket();
+    handle->setBlocking(5000000); // 5 seconds
+
+    apr_status_t rv = tcp_send_exact(apr_socket, dataout, outlen);
+    if (rv == APR_SUCCESS)
+    {
+        rv = tcp_receive_exact(apr_socket, datain, inlen);
+    }
+
+    if (rv != APR_SUCCESS)
+    {
+        char buf[MAX_STRING];
+        LL_WARNS("Proxy") << "SOCKS control-channel exchange failed, status: "
+                           << rv << " " << apr_strerror(rv, buf, MAX_STRING) << LL_ENDL;
+        ll_apr_warn_status(rv);
     }
 
     handle->setNonBlocking();
+    return rv;
+}
 
+/**
+ * @brief Receive an exact-sized continuation of a SOCKS control reply.
+ */
+static apr_status_t tcp_blocking_receive(LLSocket::ptr_t handle, char* datain, apr_size_t inlen)
+{
+    apr_socket_t* apr_socket = handle->getSocket();
+    handle->setBlocking(5000000); // 5 seconds
+
+    const apr_status_t rv = tcp_receive_exact(apr_socket, datain, inlen);
+    if (rv != APR_SUCCESS)
+    {
+        char buf[MAX_STRING];
+        LL_WARNS("Proxy") << "SOCKS control-channel receive failed, status: "
+                           << rv << " " << apr_strerror(rv, buf, MAX_STRING) << LL_ENDL;
+        ll_apr_warn_status(rv);
+    }
+
+    handle->setNonBlocking();
     return rv;
 }
 
@@ -532,12 +719,45 @@ static apr_status_t tcp_blocking_handshake(LLSocket::ptr_t handle, char * dataou
  * @param host      The host to open the connection to.
  * @return          The created socket.  Will evaluate as NULL if the connection is unsuccessful.
  */
-static LLSocket::ptr_t tcp_open_channel(LLHost host)
+static LLSocket::ptr_t tcp_open_channel(LLHost host, std::string* error_message)
 {
+    static const S32 SOCKS_CONNECT_TIMEOUT_US = 5000000; // 5 seconds for Internet-hosted proxies
+
+    if (error_message)
+    {
+        error_message->clear();
+    }
+
     LLSocket::ptr_t socket = LLSocket::create(NULL, LLSocket::STREAM_TCP);
-    bool connected = socket->blockingConnect(host);
+    if (!socket)
+    {
+        if (error_message)
+        {
+            *error_message = "The viewer could not create the TCP socket.";
+        }
+        LL_WARNS("Proxy") << "Unable to create SOCKS TCP control socket." << LL_ENDL;
+        return socket;
+    }
+
+    apr_status_t connect_status = APR_SUCCESS;
+    const bool connected = socket->blockingConnect(host, SOCKS_CONNECT_TIMEOUT_US, &connect_status);
     if (!connected)
     {
+        char status_text[MAX_STRING] = {};
+        apr_strerror(connect_status, status_text, sizeof(status_text));
+
+        if (error_message)
+        {
+            *error_message = llformat("%s (APR %d, OS %d)",
+                                      status_text,
+                                      (S32)connect_status,
+                                      (S32)APR_TO_OS_ERROR(connect_status));
+        }
+
+        LL_WARNS("Proxy") << "Unable to connect to SOCKS 5 proxy TCP endpoint "
+                           << host << ". APR status " << connect_status
+                           << ", OS status " << APR_TO_OS_ERROR(connect_status)
+                           << ": " << status_text << LL_ENDL;
         tcp_close_channel(&socket);
     }
 
