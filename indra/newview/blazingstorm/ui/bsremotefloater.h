@@ -23,7 +23,7 @@ namespace BlazingStorm
         void onClose(bool app_quitting) override;
 
     private:
-        void refresh();
+        void refresh() override;
         void setupFeatures();
         void refreshFeatures();
         unsigned mFeatureRevision = ~0u;
