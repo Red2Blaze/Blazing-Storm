@@ -804,8 +804,7 @@ namespace
         if (event.controllerTicket.empty())
             event.controllerTicket = firstJsonString(body, {"controller"});
 
-        return !event.sessionId.empty()
-            && !event.subjectTicket.empty()
+        return !event.subjectTicket.empty()
             && !event.controllerTicket.empty();
     }
 
@@ -1412,7 +1411,7 @@ namespace BlazingStorm
                         event.type = RelayEventType::Error;
                         event.detail =
                             "Broker create-session response did not contain "
-                            "sessionId, subjectTicket, and controllerInvite.";
+                            "subjectTicket and controllerInvite.";
                     }
                     pushEvent(generation, std::move(event));
                     return;
@@ -1434,25 +1433,15 @@ namespace BlazingStorm
         const std::string& ticket,
         const std::string& path_override)
     {
-        if (broker_base_url.empty() || session_id.empty() || ticket.empty())
+        if (broker_base_url.empty() || ticket.empty())
             return false;
 
         return startBrokerTask(
             [this, broker_base_url, role, session_id, ticket,
              path_override](std::uint64_t generation)
             {
-                const char* role_name =
-                    role == RelayBrokerRole::Subject ? "subject" : "controller";
                 const std::string body =
-                    "{\"protocol\":1,\"role\":\""
-                    + std::string(role_name)
-                    + "\",\"sessionId\":\""
-                    + jsonEscape(session_id)
-                    + "\",\"session\":\""
-                    + jsonEscape(session_id)
-                    + "\",\"ticket\":\""
-                    + jsonEscape(ticket)
-                    + "\",\"token\":\""
+                    "{\"ticket\":\""
                     + jsonEscape(ticket) + "\"}";
 
                 const std::vector<std::pair<std::string, std::string>> headers = {
