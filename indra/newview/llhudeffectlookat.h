@@ -61,6 +61,12 @@ public:
     bool setLookAt(ELookAtType target_type, LLViewerObject *object, LLVector3 position);
     void clearLookAtTarget();
 
+    // Blazing Storm experimental look-at effects may explicitly opt out of
+    // Firestorm's normal privacy/distance transforms. Defaults preserve
+    // existing viewer behavior for every normal look-at effect.
+    void setBypassPrivacy(bool bypass) { mBypassPrivacy = bypass; }
+    void setBypassDistanceLimit(bool bypass) { mBypassDistanceLimit = bypass; }
+
     ELookAtType getLookAtType() { return mTargetType; }
     const LLVector3& getTargetPos() { return mTargetPos; }
     const LLVector3d& getTargetOffset() { return mTargetOffsetGlobal; }
@@ -95,6 +101,8 @@ private:
     LLVector3                   mTargetPos;
     F32                         mLastSendTime;
     LLAttentionSet*             mAttentions;
+    bool                        mBypassPrivacy;
+    bool                        mBypassDistanceLimit;
 };
 
 #endif // LL_LLHUDEFFECTLOOKAT_H
