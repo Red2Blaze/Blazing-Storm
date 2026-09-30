@@ -4,7 +4,7 @@
  can_close="true"
  can_minimize="true"
  can_resize="true"
- height="650"
+ height="710"
  min_height="560"
  min_width="500"
  width="560"
@@ -265,15 +265,49 @@
    value="false" />
 
   <text
+   name="transmit_header"
+   layout="topleft"
+   left="16"
+   top="466"
+   width="240"
+   height="18"
+   font="SansSerifSmall"
+   font.style="BOLD">
+    Fake-effect transmission
+  </text>
+
+  <check_box
+   name="bypass_privacy"
+   label="Transmit even when normal LookAt privacy is enabled"
+   layout="topleft"
+   left="16"
+   top="494"
+   width="420"
+   height="20"
+   value="true"
+   tool_tip="Applies only to Fake Look At Lab effects. Normal viewer look-at privacy remains unchanged." />
+
+  <check_box
+   name="bypass_distance_limit"
+   label="Use Lab distances instead of Firestorm's normal LookAt distance limit"
+   layout="topleft"
+   left="16"
+   top="522"
+   width="500"
+   height="20"
+   value="true"
+   tool_tip="Applies only to Fake Look At Lab effects so Minimum/Maximum distance controls remain authoritative." />
+
+  <text
    name="limits_note"
    layout="topleft"
    left="16"
    right="-16"
-   top="466"
-   height="46"
+   top="554"
+   height="42"
    follows="left|top|right"
    word_wrap="true">
-    Hard limit: 64 simultaneous fake look-at effects. Firestorm look-at privacy/limiter settings are still respected. Short-lived look-at types are recreated automatically while running.
+    Hard limit: 64 simultaneous fake look-at effects. These override options apply only to this Lab and do not change Firestorm's normal look-at settings.
   </text>
 
   <button
@@ -281,7 +315,7 @@
    label="Start"
    layout="topleft"
    left="16"
-   top="526"
+   top="610"
    width="130"
    height="32" />
   <button
@@ -289,7 +323,7 @@
    label="Refresh Targets Now"
    layout="topleft"
    left="158"
-   top="526"
+   top="610"
    width="180"
    height="32" />
   <button
@@ -297,7 +331,7 @@
    label="STOP / CLEAR"
    layout="topleft"
    left="350"
-   top="526"
+   top="610"
    width="160"
    height="32" />
 
@@ -305,7 +339,7 @@
    name="status_header"
    layout="topleft"
    left="16"
-   top="579"
+   top="659"
    width="120"
    height="18"
    font="SansSerifSmall"
@@ -317,7 +351,7 @@
    layout="topleft"
    left="16"
    right="-16"
-   top="602"
+   top="682"
    bottom="-12"
    follows="left|top|right|bottom"
    word_wrap="true">
