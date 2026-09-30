@@ -42,6 +42,8 @@ namespace BlazingStorm
         bool currentRegionOnly = true;
         bool rootObjectsOnly = true;
         bool excludeAttachments = true;
+        bool bypassViewerPrivacy = true;
+        bool bypassViewerDistanceLimit = true;
     };
 
     class FakeLookAtManager final : public LLEventTimer
