@@ -28,6 +28,14 @@ namespace BlazingStorm
         Mixed
     };
 
+    enum class FakeLookAtLabelMode : S32
+    {
+        ActualAvatarName = 0,
+        SingleCustomName,
+        RandomFromList,
+        SequentialFromList
+    };
+
     struct FakeLookAtConfig
     {
         FakeLookAtMode mode = FakeLookAtMode::RandomPositions;
@@ -44,6 +52,9 @@ namespace BlazingStorm
         bool excludeAttachments = true;
         bool bypassViewerPrivacy = true;
         bool bypassViewerDistanceLimit = true;
+        FakeLookAtLabelMode labelMode = FakeLookAtLabelMode::ActualAvatarName;
+        std::string singleLabel;
+        std::string labelList;
     };
 
     class FakeLookAtManager final : public LLEventTimer
@@ -94,6 +105,8 @@ namespace BlazingStorm
         Target makeRandomPositionTarget() const;
         LLVector3 makeObjectOffset(bool avatar) const;
         S32 resolveRequestedCount(S32 available = MAX_EFFECTS) const;
+        std::vector<std::string> parseLabelList() const;
+        std::string labelForEffect(S32 effect_index);
 
         FakeLookAtConfig mConfig;
         bool mRunning = false;
@@ -101,6 +114,7 @@ namespace BlazingStorm
         LLViewerRegion* mLastRegion = nullptr;
         S32 mLastAvatarCandidates = 0;
         S32 mLastObjectCandidates = 0;
+        S32 mSequentialLabelIndex = 0;
 
         std::vector<LLPointer<LLHUDEffectLookAt>> mActiveEffects;
         std::vector<RetiringEffect> mRetiringEffects;
