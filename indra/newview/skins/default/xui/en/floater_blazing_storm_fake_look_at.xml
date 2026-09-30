@@ -4,8 +4,8 @@
  can_close="true"
  can_minimize="true"
  can_resize="true"
- height="710"
- min_height="560"
+ height="860"
+ min_height="800"
  min_width="500"
  width="560"
  layout="topleft"
@@ -77,10 +77,86 @@
   </combo_box>
 
   <text
+   name="labels_header"
+   layout="topleft"
+   left="16"
+   top="145"
+   width="310"
+   height="18"
+   font="SansSerifSmall"
+   font.style="BOLD">
+    Debug cross labels (local viewer)
+  </text>
+
+  <text
+   name="label_mode_label"
+   layout="topleft"
+   left="16"
+   top="175"
+   width="105"
+   height="18">
+    Label mode:
+  </text>
+  <combo_box
+   name="label_mode"
+   layout="topleft"
+   left="128"
+   top="169"
+   width="210"
+   height="26"
+   allow_text_entry="false"
+   tool_tip="Custom labels are local debug text. Standard receiving viewers resolve names from the real source avatar UUID.">
+    <combo_box.item label="Actual avatar name" name="Actual" value="actual" />
+    <combo_box.item label="Single custom name" name="Single" value="single" />
+    <combo_box.item label="Random name from list" name="RandomList" value="random_list" />
+    <combo_box.item label="Sequential names from list" name="SequentialList" value="sequential_list" />
+  </combo_box>
+
+  <text
+   name="single_label_label"
+   layout="topleft"
+   left="16"
+   top="211"
+   width="105"
+   height="18">
+    Single name:
+  </text>
+  <line_editor
+   name="single_label"
+   layout="topleft"
+   left="128"
+   right="-16"
+   top="205"
+   height="26"
+   follows="left|top|right"
+   max_length_bytes="255"
+   tool_tip="Used when Label mode is Single custom name." />
+
+  <text
+   name="label_list_label"
+   layout="topleft"
+   left="16"
+   top="247"
+   width="105"
+   height="18">
+    Name list:
+  </text>
+  <line_editor
+   name="label_list"
+   layout="topleft"
+   left="128"
+   right="-16"
+   top="241"
+   height="26"
+   follows="left|top|right"
+   max_length_bytes="4096"
+   tool_tip="Comma or semicolon separated names. Random mode chooses one per effect; Sequential mode cycles through them." />
+
+  <text
    name="count_label"
    layout="topleft"
    left="16"
-   top="151"
+   top="271"
    width="105"
    height="18">
     Effect count:
@@ -89,7 +165,7 @@
    name="count"
    layout="topleft"
    left="128"
-   top="144"
+   top="264"
    width="92"
    height="26"
    min_val="0"
@@ -103,7 +179,7 @@
    label="Randomize 1..count each refresh"
    layout="topleft"
    left="238"
-   top="149"
+   top="269"
    width="250"
    height="20" />
 
@@ -111,7 +187,7 @@
    name="distance_header"
    layout="topleft"
    left="16"
-   top="194"
+   top="314"
    width="240"
    height="18"
    font="SansSerifSmall"
@@ -119,14 +195,14 @@
     Distance filter / random radius
   </text>
 
-  <text name="min_distance_label" layout="topleft" left="16" top="224" width="105" height="18">
+  <text name="min_distance_label" layout="topleft" left="16" top="344" width="105" height="18">
     Minimum:
   </text>
   <spinner
    name="min_distance"
    layout="topleft"
    left="128"
-   top="217"
+   top="337"
    width="92"
    height="26"
    min_val="0"
@@ -135,14 +211,14 @@
    decimal_digits="1"
    value="2" />
 
-  <text name="max_distance_label" layout="topleft" left="250" top="224" width="90" height="18">
+  <text name="max_distance_label" layout="topleft" left="250" top="344" width="90" height="18">
     Maximum:
   </text>
   <spinner
    name="max_distance"
    layout="topleft"
    left="342"
-   top="217"
+   top="337"
    width="100"
    height="26"
    min_val="0"
@@ -155,7 +231,7 @@
    name="timing_header"
    layout="topleft"
    left="16"
-   top="265"
+   top="385"
    width="240"
    height="18"
    font="SansSerifSmall"
@@ -163,14 +239,14 @@
     Motion and refresh
   </text>
 
-  <text name="refresh_label" layout="topleft" left="16" top="295" width="105" height="18">
+  <text name="refresh_label" layout="topleft" left="16" top="415" width="105" height="18">
     Refresh every:
   </text>
   <spinner
    name="refresh_seconds"
    layout="topleft"
    left="128"
-   top="288"
+   top="408"
    width="92"
    height="26"
    min_val="0.5"
@@ -179,16 +255,16 @@
    decimal_digits="1"
    value="3"
    tool_tip="Minimum is 0.5 seconds to avoid excessive ViewerEffect traffic." />
-  <text name="refresh_units" layout="topleft" left="226" top="295" width="65" height="18">seconds</text>
+  <text name="refresh_units" layout="topleft" left="226" top="415" width="65" height="18">seconds</text>
 
-  <text name="vertical_label" layout="topleft" left="16" top="331" width="105" height="18">
+  <text name="vertical_label" layout="topleft" left="16" top="451" width="105" height="18">
     Vertical spread:
   </text>
   <spinner
    name="vertical_scale"
    layout="topleft"
    left="128"
-   top="324"
+   top="444"
    width="92"
    height="26"
    min_val="0"
@@ -198,14 +274,14 @@
    value="0.35"
    tool_tip="Random-position mode: 0 stays level with you; 1 allows the full radius vertically." />
 
-  <text name="jitter_label" layout="topleft" left="250" top="331" width="90" height="18">
+  <text name="jitter_label" layout="topleft" left="250" top="451" width="90" height="18">
     Object jitter:
   </text>
   <spinner
    name="object_jitter"
    layout="topleft"
    left="342"
-   top="324"
+   top="444"
    width="100"
    height="26"
    min_val="0"
@@ -219,7 +295,7 @@
    name="filters_header"
    layout="topleft"
    left="16"
-   top="374"
+   top="494"
    width="240"
    height="18"
    font="SansSerifSmall"
@@ -232,7 +308,7 @@
    label="Only targets in my current region"
    layout="topleft"
    left="16"
-   top="402"
+   top="522"
    width="275"
    height="20"
    value="true" />
@@ -241,7 +317,7 @@
    label="World objects: root prims only"
    layout="topleft"
    left="16"
-   top="430"
+   top="550"
    width="275"
    height="20"
    value="true" />
@@ -250,7 +326,7 @@
    label="World objects: exclude attachments"
    layout="topleft"
    left="300"
-   top="402"
+   top="522"
    width="240"
    height="20"
    value="true" />
@@ -259,7 +335,7 @@
    label="Stop when this window closes"
    layout="topleft"
    left="300"
-   top="430"
+   top="550"
    width="240"
    height="20"
    value="false" />
@@ -268,7 +344,7 @@
    name="transmit_header"
    layout="topleft"
    left="16"
-   top="466"
+   top="586"
    width="240"
    height="18"
    font="SansSerifSmall"
@@ -281,7 +357,7 @@
    label="Transmit even when normal LookAt privacy is enabled"
    layout="topleft"
    left="16"
-   top="494"
+   top="614"
    width="420"
    height="20"
    value="true"
@@ -292,7 +368,7 @@
    label="Use Lab distances instead of Firestorm's normal LookAt distance limit"
    layout="topleft"
    left="16"
-   top="522"
+   top="642"
    width="500"
    height="20"
    value="true"
@@ -303,7 +379,7 @@
    layout="topleft"
    left="16"
    right="-16"
-   top="554"
+   top="674"
    height="42"
    follows="left|top|right"
    word_wrap="true">
@@ -315,7 +391,7 @@
    label="Start"
    layout="topleft"
    left="16"
-   top="610"
+   top="730"
    width="130"
    height="32" />
   <button
@@ -323,7 +399,7 @@
    label="Refresh Targets Now"
    layout="topleft"
    left="158"
-   top="610"
+   top="730"
    width="180"
    height="32" />
   <button
@@ -331,7 +407,7 @@
    label="STOP / CLEAR"
    layout="topleft"
    left="350"
-   top="610"
+   top="730"
    width="160"
    height="32" />
 
@@ -339,7 +415,7 @@
    name="status_header"
    layout="topleft"
    left="16"
-   top="659"
+   top="779"
    width="120"
    height="18"
    font="SansSerifSmall"
@@ -351,7 +427,7 @@
    layout="topleft"
    left="16"
    right="-16"
-   top="682"
+   top="802"
    bottom="-12"
    follows="left|top|right|bottom"
    word_wrap="true">
