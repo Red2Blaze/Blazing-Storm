@@ -86,7 +86,17 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
         return false;
     }
 
-    const std::wstring wide_title = utf8str_to_wstring(title);
+    const int title_chars = MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, nullptr, 0);
+    std::wstring wide_title;
+    if (title_chars > 0)
+    {
+        wide_title.resize(static_cast<size_t>(title_chars));
+        MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, &wide_title[0], title_chars);
+    }
+    if (wide_title.empty())
+    {
+        wide_title = L"Blazing Storm";
+    }
     HWND hwnd = CreateWindowExW(
         WS_EX_APPWINDOW,
         BS_DETACHED_WINDOW_CLASS,
