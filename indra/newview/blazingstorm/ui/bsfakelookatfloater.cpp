@@ -11,6 +11,7 @@
 #include "llbutton.h"
 #include "llcheckboxctrl.h"
 #include "llcombobox.h"
+#include "lllineeditor.h"
 #include "llspinctrl.h"
 #include "lltextbox.h"
 
@@ -32,6 +33,9 @@ namespace BlazingStorm
 
         getChild<LLComboBox>("mode")->setCommitCallback(config_changed);
         getChild<LLComboBox>("look_type")->setCommitCallback(config_changed);
+        getChild<LLComboBox>("label_mode")->setCommitCallback(config_changed);
+        getChild<LLLineEditor>("single_label")->setCommitCallback(config_changed);
+        getChild<LLLineEditor>("label_list")->setCommitCallback(config_changed);
 
         for (const char* name : {"count", "min_distance", "max_distance", "refresh_seconds",
                                  "vertical_scale", "object_jitter"})
@@ -97,6 +101,19 @@ namespace BlazingStorm
         config.objectJitter = static_cast<F32>(getChild<LLSpinCtrl>("object_jitter")->getValue().asReal());
         config.lookType = static_cast<ELookAtType>(
             getChild<LLComboBox>("look_type")->getValue().asInteger());
+
+        const std::string label_mode = getChild<LLComboBox>("label_mode")->getValue().asString();
+        if (label_mode == "single")
+            config.labelMode = FakeLookAtLabelMode::SingleCustomName;
+        else if (label_mode == "random_list")
+            config.labelMode = FakeLookAtLabelMode::RandomFromList;
+        else if (label_mode == "sequential_list")
+            config.labelMode = FakeLookAtLabelMode::SequentialFromList;
+        else
+            config.labelMode = FakeLookAtLabelMode::ActualAvatarName;
+
+        config.singleLabel = getChild<LLLineEditor>("single_label")->getText();
+        config.labelList = getChild<LLLineEditor>("label_list")->getText();
 
         config.randomizeCount = getChild<LLCheckBoxCtrl>("randomize_count")->getValue().asBoolean();
         config.currentRegionOnly = getChild<LLCheckBoxCtrl>("current_region_only")->getValue().asBoolean();
