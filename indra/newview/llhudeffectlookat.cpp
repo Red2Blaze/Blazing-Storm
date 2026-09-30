@@ -250,6 +250,8 @@ LLHUDEffectLookAt::LLHUDEffectLookAt(const U8 type) :
     LLHUDEffect(type),
     mKillTime(0.f),
     mLastSendTime(0.f),
+    mBypassPrivacy(false),
+    mBypassDistanceLimit(false),
     //<FS:AO improve use of controls with radiogroups>
     //mDebugLookAt( LLCachedControl<bool>(gSavedPerAccountSettings, "DebugLookAt", false))
     mDebugLookAt( LLCachedControl<S32>(gSavedPerAccountSettings, "DebugLookAt", 0))
@@ -309,12 +311,12 @@ void LLHUDEffectLookAt::packData(LLMessageSystem *mesgsys)
         markDead();
         return;
     }
-    else if (isLocalPrivate && is_private) // AO: send nothing if we're not showing anything ourselves
+    else if (!mBypassPrivacy && isLocalPrivate && is_private) // AO: send nothing if we're not showing anything ourselves
     {
         markDead();
         return;
     }
-    else if (is_private && target_type != LOOKAT_TARGET_AUTO_LISTEN) // AW: spoof boring lookat target to others if we still want real local effects.
+    else if (!mBypassPrivacy && is_private && target_type != LOOKAT_TARGET_AUTO_LISTEN) // AW: spoof boring lookat target to others if we still want real local effects.
     {
         //this mimicks "do nothing"
         target_type = LOOKAT_TARGET_AUTO_LISTEN;
@@ -556,7 +558,7 @@ bool LLHUDEffectLookAt::setLookAt(ELookAtType target_type, LLViewerObject *objec
 
 
     static LLCachedControl<bool> s_EnableLimiter(gSavedSettings, "FSLookAtTargetLimitDistance");
-    bool lookAtShouldClamp = s_EnableLimiter &&
+    bool lookAtShouldClamp = !mBypassDistanceLimit && s_EnableLimiter &&
                         (*mAttentions)[mTargetType].mName != "None" &&
                         (*mAttentions)[mTargetType].mName != "Idle" &&
                         (*mAttentions)[mTargetType].mName != "Respond" &&
