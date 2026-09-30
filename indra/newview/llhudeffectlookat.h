@@ -30,6 +30,8 @@
 #include "llhudeffect.h"
 #include "llcontrol.h"
 
+#include <string>
+
 class LLViewerObject;
 class LLVOAvatar;
 class LLAttentionSet;
@@ -66,6 +68,7 @@ public:
     // existing viewer behavior for every normal look-at effect.
     void setBypassPrivacy(bool bypass) { mBypassPrivacy = bypass; }
     void setBypassDistanceLimit(bool bypass) { mBypassDistanceLimit = bypass; }
+    void setDebugLabelOverride(const std::string& label) { mDebugLabelOverride = label; }
 
     ELookAtType getLookAtType() { return mTargetType; }
     const LLVector3& getTargetPos() { return mTargetPos; }
@@ -103,6 +106,7 @@ private:
     LLAttentionSet*             mAttentions;
     bool                        mBypassPrivacy;
     bool                        mBypassDistanceLimit;
+    std::string                 mDebugLabelOverride;
 };
 
 #endif // LL_LLHUDEFFECTLOOKAT_H
