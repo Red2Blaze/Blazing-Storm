@@ -729,24 +729,27 @@ void LLHUDEffectLookAt::render()
             const LLFontGL* fontp = LLFontGL::getFont(LLFontDescriptor("SansSerif", "Small", LLFontGL::NORMAL));
             LLVector3 position = target + LLVector3(0.f, 0.f, 0.3f);
 
-            std::string name;
-            LLAvatarName nameBuffer;
-            if (LLAvatarNameCache::get(mSourceObject->getID(), &nameBuffer))
+            std::string name = mDebugLabelOverride;
+            if (name.empty())
             {
-                switch (show_names)
+                LLAvatarName nameBuffer;
+                if (LLAvatarNameCache::get(mSourceObject->getID(), &nameBuffer))
                 {
-                    case 1: // Display Name (user.name)
-                        name = nameBuffer.getCompleteName();
-                        break;
-                    case 2: // Display Name
-                        name = nameBuffer.getDisplayName();
-                        break;
-                    case 3: // First Last
-                        name = nameBuffer.getUserNameForDisplay();
-                        break;
-                    default: //user.name
-                        name = nameBuffer.getAccountName();
-                        break;
+                    switch (show_names)
+                    {
+                        case 1: // Display Name (user.name)
+                            name = nameBuffer.getCompleteName();
+                            break;
+                        case 2: // Display Name
+                            name = nameBuffer.getDisplayName();
+                            break;
+                        case 3: // First Last
+                            name = nameBuffer.getUserNameForDisplay();
+                            break;
+                        default: //user.name
+                            name = nameBuffer.getAccountName();
+                            break;
+                    }
                 }
             }
 
