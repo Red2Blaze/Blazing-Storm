@@ -40,7 +40,8 @@ namespace BlazingStorm
         }
 
         for (const char* name : {"randomize_count", "current_region_only",
-                                 "root_objects_only", "exclude_attachments"})
+                                 "root_objects_only", "exclude_attachments",
+                                 "bypass_privacy", "bypass_distance_limit"})
         {
             getChild<LLCheckBoxCtrl>(name)->setCommitCallback(config_changed);
         }
@@ -101,6 +102,8 @@ namespace BlazingStorm
         config.currentRegionOnly = getChild<LLCheckBoxCtrl>("current_region_only")->getValue().asBoolean();
         config.rootObjectsOnly = getChild<LLCheckBoxCtrl>("root_objects_only")->getValue().asBoolean();
         config.excludeAttachments = getChild<LLCheckBoxCtrl>("exclude_attachments")->getValue().asBoolean();
+        config.bypassViewerPrivacy = getChild<LLCheckBoxCtrl>("bypass_privacy")->getValue().asBoolean();
+        config.bypassViewerDistanceLimit = getChild<LLCheckBoxCtrl>("bypass_distance_limit")->getValue().asBoolean();
 
         auto& manager = FakeLookAtManager::instance();
         const bool was_running = manager.isRunning();
