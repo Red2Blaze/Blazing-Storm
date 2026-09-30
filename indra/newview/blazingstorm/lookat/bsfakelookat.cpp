@@ -204,6 +204,8 @@ namespace BlazingStorm
             }
 
             effect->setSourceObject(gAgentAvatarp);
+            effect->setBypassPrivacy(mConfig.bypassViewerPrivacy);
+            effect->setBypassDistanceLimit(mConfig.bypassViewerDistanceLimit);
             mActiveEffects.emplace_back(effect);
         }
     }
@@ -447,6 +449,8 @@ namespace BlazingStorm
                 effect = replacement;
             }
 
+            effect->setBypassPrivacy(mConfig.bypassViewerPrivacy);
+            effect->setBypassDistanceLimit(mConfig.bypassViewerDistanceLimit);
             effect->setLookAt(mConfig.lookType, targets[i].object, targets[i].position);
         }
     }
