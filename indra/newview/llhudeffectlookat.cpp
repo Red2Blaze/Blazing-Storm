@@ -713,7 +713,8 @@ void LLHUDEffectLookAt::render()
     {
         static LLCachedControl<bool> hide_own(gSavedPerAccountSettings, "DebugLookAtHideOwn", false);
         static LLCachedControl<bool> is_private(gSavedSettings, "PrivateLookAtTarget", false);
-        if ((hide_own || is_private) && ((LLVOAvatar*)(LLViewerObject*)mSourceObject)->isSelf())
+        if ((hide_own || (!mBypassPrivacy && is_private)) &&
+            ((LLVOAvatar*)(LLViewerObject*)mSourceObject)->isSelf())
             return;
 
         //LLGLDisable gls_stencil(GL_STENCIL_TEST);
