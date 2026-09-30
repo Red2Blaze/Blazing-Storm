@@ -17,6 +17,7 @@
 #include "llvoavatarself.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <utility>
 
@@ -28,6 +29,14 @@ namespace
     F32 clampDistance(F32 value)
     {
         return llclamp(value, 0.f, 4096.f);
+    }
+
+    std::string trimCopy(std::string value)
+    {
+        auto not_space = [](unsigned char ch) { return !std::isspace(ch); };
+        value.erase(value.begin(), std::find_if(value.begin(), value.end(), not_space));
+        value.erase(std::find_if(value.rbegin(), value.rend(), not_space).base(), value.end());
+        return value;
     }
 }
 
@@ -315,6 +324,67 @@ namespace BlazingStorm
         return requested;
     }
 
+    std::vector<std::string> FakeLookAtManager::parseLabelList() const
+    {
+        std::vector<std::string> labels;
+        std::string current;
+
+        auto flush = [&]()
+        {
+            std::string trimmed = trimCopy(current);
+            if (!trimmed.empty())
+            {
+                labels.push_back(std::move(trimmed));
+            }
+            current.clear();
+        };
+
+        for (char ch : mConfig.labelList)
+        {
+            if (ch == ',' || ch == ';' || ch == '\n' || ch == '\r')
+            {
+                flush();
+            }
+            else
+            {
+                current.push_back(ch);
+            }
+        }
+        flush();
+        return labels;
+    }
+
+    std::string FakeLookAtManager::labelForEffect(S32 effect_index)
+    {
+        switch (mConfig.labelMode)
+        {
+            case FakeLookAtLabelMode::SingleCustomName:
+                return trimCopy(mConfig.singleLabel);
+
+            case FakeLookAtLabelMode::RandomFromList:
+            {
+                auto labels = parseLabelList();
+                return labels.empty() ? std::string() : labels[ll_rand(static_cast<S32>(labels.size()))];
+            }
+
+            case FakeLookAtLabelMode::SequentialFromList:
+            {
+                auto labels = parseLabelList();
+                if (labels.empty())
+                {
+                    return {};
+                }
+
+                const S32 index = (mSequentialLabelIndex + effect_index) % static_cast<S32>(labels.size());
+                return labels[index];
+            }
+
+            case FakeLookAtLabelMode::ActualAvatarName:
+            default:
+                return {};
+        }
+    }
+
     FakeLookAtManager::Target FakeLookAtManager::makeRandomPositionTarget() const
     {
         const F32 min_distance = mConfig.minDistance;
@@ -451,7 +521,18 @@ namespace BlazingStorm
 
             effect->setBypassPrivacy(mConfig.bypassViewerPrivacy);
             effect->setBypassDistanceLimit(mConfig.bypassViewerDistanceLimit);
+            effect->setDebugLabelOverride(labelForEffect(i));
             effect->setLookAt(mConfig.lookType, targets[i].object, targets[i].position);
+        }
+
+        if (mConfig.labelMode == FakeLookAtLabelMode::SequentialFromList)
+        {
+            const auto labels = parseLabelList();
+            if (!labels.empty())
+            {
+                mSequentialLabelIndex =
+                    (mSequentialLabelIndex + target_count) % static_cast<S32>(labels.size());
+            }
         }
     }
 }
