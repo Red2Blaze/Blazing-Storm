@@ -12,6 +12,7 @@
 #include "llpointer.h"
 #include "v3math.h"
 
+#include <string>
 #include <vector>
 
 class LLViewerObject;
