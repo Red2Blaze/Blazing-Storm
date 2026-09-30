@@ -86,6 +86,7 @@
 #include "NACLantispam.h"
 // </FS:TS> FIRE-23123
 #include "lfsimfeaturehandler.h"
+#include "blazingstorm/ui/bsdetachedfloaterhost.h"
 
 S32 FSFloaterNearbyChat::sLastSpecialChatChannel = 0;
 
@@ -422,6 +423,19 @@ void FSFloaterNearbyChat::onSearchButtonClicked()
 
 void FSFloaterNearbyChat::onChatOptionsContextMenuItemClicked(const LLSD& userdata)
 {
+    if (userdata.asString() == "pop_out_native")
+    {
+        if (BSDetachedFloaterHost::instance().isDetached(this))
+        {
+            BSDetachedFloaterHost::instance().attach();
+        }
+        else
+        {
+            BSDetachedFloaterHost::instance().detach(this, "Blazing Storm - Nearby Chat");
+        }
+        return;
+    }
+
     FSChatOptionsMenu::onMenuItemClick(userdata, this);
 }
 
