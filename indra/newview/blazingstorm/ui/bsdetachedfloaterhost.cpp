@@ -12,6 +12,11 @@
 
 #include "llfloater.h"
 #include "llview.h"
+#include "llrender.h"
+#include "llui.h"
+#include "llviewerwindow.h"
+#include "llglslshader.h"
+#include "pipeline.h"
 
 #ifdef LL_WINDOWS
 # include <windows.h>
@@ -112,6 +117,12 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
     }
 
     mNativeWindow = hwnd;
+    if (!createGLSurface())
+    {
+        DestroyWindow(hwnd);
+        mNativeWindow = nullptr;
+        return false;
+    }
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
     return true;
@@ -119,6 +130,7 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
 
 void BSDetachedFloaterHost::destroyNativeWindow()
 {
+    destroyGLSurface();
     if (mNativeWindow)
     {
         HWND hwnd = static_cast<HWND>(mNativeWindow);
@@ -128,6 +140,132 @@ void BSDetachedFloaterHost::destroyNativeWindow()
             DestroyWindow(hwnd);
         }
     }
+}
+
+
+bool BSDetachedFloaterHost::createGLSurface()
+{
+    HWND hwnd = static_cast<HWND>(mNativeWindow);
+    HDC dc = GetDC(hwnd);
+    if (!dc)
+    {
+        return false;
+    }
+
+    // Match the main viewer pixel format. This is required for WGL resource
+    // sharing and avoids running the viewer's global GL initialization again.
+    HDC main_dc = wglGetCurrentDC();
+    HGLRC main_rc = wglGetCurrentContext();
+    const int pixel_format = main_dc ? GetPixelFormat(main_dc) : 0;
+    PIXELFORMATDESCRIPTOR pfd = {};
+
+    if (!main_dc || !main_rc || pixel_format == 0 ||
+        !DescribePixelFormat(main_dc, pixel_format, sizeof(pfd), &pfd) ||
+        !SetPixelFormat(dc, pixel_format, &pfd))
+    {
+        ReleaseDC(hwnd, dc);
+        LL_WARNS("DetachedFloaters") << "Unable to match the viewer OpenGL pixel format." << LL_ENDL;
+        return false;
+    }
+
+    HGLRC rc = wglCreateContext(dc);
+    if (!rc || !wglShareLists(main_rc, rc))
+    {
+        if (rc)
+        {
+            wglDeleteContext(rc);
+        }
+        ReleaseDC(hwnd, dc);
+        LL_WARNS("DetachedFloaters") << "Unable to create shared OpenGL context." << LL_ENDL;
+        return false;
+    }
+
+    mNativeDC = dc;
+    mGLContext = rc;
+    return true;
+}
+
+void BSDetachedFloaterHost::destroyGLSurface()
+{
+    if (mGLContext)
+    {
+        HGLRC rc = static_cast<HGLRC>(mGLContext);
+        if (wglGetCurrentContext() == rc)
+        {
+            wglMakeCurrent(nullptr, nullptr);
+        }
+        wglDeleteContext(rc);
+        mGLContext = nullptr;
+    }
+
+    if (mNativeDC && mNativeWindow)
+    {
+        ReleaseDC(static_cast<HWND>(mNativeWindow), static_cast<HDC>(mNativeDC));
+        mNativeDC = nullptr;
+    }
+}
+
+void BSDetachedFloaterHost::draw()
+{
+    if (!mFloater || !mNativeWindow || !mNativeDC || !mGLContext ||
+        !IsWindowVisible(static_cast<HWND>(mNativeWindow)) ||
+        IsIconic(static_cast<HWND>(mNativeWindow)))
+    {
+        return;
+    }
+
+    HDC previous_dc = wglGetCurrentDC();
+    HGLRC previous_rc = wglGetCurrentContext();
+
+    HDC dc = static_cast<HDC>(mNativeDC);
+    HGLRC rc = static_cast<HGLRC>(mGLContext);
+    if (!wglMakeCurrent(dc, rc))
+    {
+        return;
+    }
+
+    RECT client = {};
+    GetClientRect(static_cast<HWND>(mNativeWindow), &client);
+    const S32 width = llmax(1L, client.right - client.left);
+    const S32 height = llmax(1L, client.bottom - client.top);
+
+    glViewport(0, 0, width, height);
+    glClearColor(0.f, 0.f, 0.f, 1.f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Set up a simple UI projection for this HWND, then draw only the floater.
+    gGL.matrixMode(LLRender::MM_PROJECTION);
+    gGL.pushMatrix();
+    gGL.loadIdentity();
+    gGL.ortho(0.f, (F32)width, 0.f, (F32)height, -1.f, 1.f);
+    gGL.matrixMode(LLRender::MM_MODELVIEW);
+    gGL.pushMatrix();
+    gGL.loadIdentity();
+
+    const LLRect old_rect = mFloater->getRect();
+    mFloater->reshape(width, height, false);
+    mFloater->setOrigin(0, 0);
+
+    gUIProgram.bind();
+    gGL.color4f(1.f, 1.f, 1.f, 1.f);
+    LLView::sIsDrawing = true;
+    mFloater->draw();
+    LLView::sIsDrawing = false;
+    gGL.flush();
+    gUIProgram.unbind();
+
+    // Keep the detached size while detached; reattachment can restore normal
+    // floater placement through its existing saved-rect behavior.
+    (void)old_rect;
+
+    gGL.matrixMode(LLRender::MM_MODELVIEW);
+    gGL.popMatrix();
+    gGL.matrixMode(LLRender::MM_PROJECTION);
+    gGL.popMatrix();
+    gGL.matrixMode(LLRender::MM_MODELVIEW);
+
+    SwapBuffers(dc);
+    wglMakeCurrent(previous_dc, previous_rc);
 }
 
 long long __stdcall BSDetachedFloaterHost::windowProc(void* raw_hwnd, unsigned int message,
