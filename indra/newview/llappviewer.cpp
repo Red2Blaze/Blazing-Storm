@@ -183,6 +183,7 @@
 #include "blazingstorm/remote/bsremoteactions.h" // <BlazingStorm>
 #include "blazingstorm/remote/bsremotesession.h" // <BlazingStorm>
 #include "blazingstorm/remote/bslocaltransport.h" // <BlazingStorm>
+#include "blazingstorm/ui/bsdetachedfloaterhost.h" // <BlazingStorm>
 #include "lllfsthread.h"
 #include "llworkerthread.h"
 #include "lltexturecache.h"
@@ -1783,6 +1784,14 @@ bool LLAppViewer::doFrame()
                 gGLActive = true;
 
                 display();
+
+                // <BlazingStorm> Draw native detached floaters only after the
+                // main display pass has completed, then restore its GL context.
+                if (BSDetachedFloaterHost::instanceExists())
+                {
+                    BSDetachedFloaterHost::instance().draw();
+                }
+                // </BlazingStorm>
 
                 if (LLStartUp::getStartupState() == STATE_STARTED) // <FS:Beq/> FIRE-34590 - Bugsplat caused by updating maps before world is loaded.
                 {
