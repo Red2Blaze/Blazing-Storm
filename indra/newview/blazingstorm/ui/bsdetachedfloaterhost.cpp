@@ -254,9 +254,8 @@ void BSDetachedFloaterHost::draw()
     gGL.flush();
     gUIProgram.unbind();
 
-    // Keep the detached size while detached; reattachment can restore normal
-    // floater placement through its existing saved-rect behavior.
-    (void)old_rect;
+    // Drawing must not permanently alter the floater's in-viewer geometry.
+    mFloater->setRect(old_rect);
 
     gGL.matrixMode(LLRender::MM_MODELVIEW);
     gGL.popMatrix();
