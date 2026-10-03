@@ -22,11 +22,18 @@ public:
     bool isDetached() const { return mFloater != nullptr; }
     bool isDetached(const LLFloater* floater) const { return mFloater == floater; }
 
+    // Draw the detached floater after the main viewer frame has completed.
+    void draw();
+
 private:
     LLFloater* mFloater = nullptr;
 
 #ifdef LL_WINDOWS
     void* mNativeWindow = nullptr;
+    void* mNativeDC = nullptr;
+    void* mGLContext = nullptr;
+    bool createGLSurface();
+    void destroyGLSurface();
     static long long __stdcall windowProc(void* hwnd, unsigned int message,
                                            unsigned long long wparam, long long lparam);
     bool createNativeWindow(const std::string& title);
