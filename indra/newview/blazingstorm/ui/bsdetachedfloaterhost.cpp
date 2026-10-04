@@ -170,17 +170,13 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
     const S32 client_height = llmax<S32>(
         1, ll_round((F32)mOriginalRect.getHeight() * ui_scale.mV[VY]));
 
-    HWND owner = gViewerWindow
-        ? static_cast<HWND>(gViewerWindow->getPlatformWindow())
-        : nullptr;
-
     HWND hwnd = CreateWindowExW(
         ex_style,
         BS_DETACHED_WINDOW_CLASS,
         wide_title.c_str(),
         style,
         CW_USEDEFAULT, CW_USEDEFAULT, client_width, client_height,
-        owner, nullptr, instance, this);
+        nullptr, nullptr, instance, this);
 
     if (!hwnd)
     {
@@ -190,10 +186,28 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
     }
 
     mNativeWindow = hwnd;
+    mAlwaysOnTop = false;
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
     return true;
+}
+
+void BSDetachedFloaterHost::setAlwaysOnTop(bool enabled)
+{
+    mAlwaysOnTop = enabled;
+
+    if (!mNativeWindow)
+    {
+        return;
+    }
+
+    HWND hwnd = static_cast<HWND>(mNativeWindow);
+    SetWindowPos(
+        hwnd,
+        enabled ? HWND_TOPMOST : HWND_NOTOPMOST,
+        0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
 void BSDetachedFloaterHost::destroyNativeWindow()
@@ -265,16 +279,20 @@ void BSDetachedFloaterHost::dispatchMouseMessage(
     const S32 y = height - 1 - point.y;
     const MASK mask = detachedMask(true);
 
-    // Keep the live Conversations hierarchy at its original Firestorm layout
-    // size. Scale native-window coordinates back into that immutable layout.
-    const S32 logical_width = llmax<S32>(1, mOriginalRect.getWidth());
-    const S32 logical_height = llmax<S32>(1, mOriginalRect.getHeight());
+    // The detached floater is laid out at the native client size using the
+    // viewer's normal UI scale, so mouse coordinates map directly back into
+    // the current responsive Firestorm layout.
+    const LLVector2 ui_scale = LLUI::getScaleFactor();
+    const S32 logical_width = llmax<S32>(
+        1, ll_round((F32)width / ui_scale.mV[VX]));
+    const S32 logical_height = llmax<S32>(
+        1, ll_round((F32)height / ui_scale.mV[VY]));
 
     const S32 ui_x = llclamp(
-        ll_round((F32)x * (F32)logical_width / (F32)width),
+        ll_round((F32)x / ui_scale.mV[VX]),
         0, logical_width - 1);
     const S32 ui_y = llclamp(
-        ll_round((F32)y * (F32)logical_height / (F32)height),
+        ll_round((F32)y / ui_scale.mV[VY]),
         0, logical_height - 1);
 
     switch (message)
@@ -485,9 +503,6 @@ void BSDetachedFloaterHost::draw()
     if (mFloater->isMinimized())
     {
         mFloater->setMinimized(false);
-        // setMinimized() can touch the floater's own rect; put the detached
-        // root back on its immutable layout rectangle before continuing.
-        mFloater->setRect(mOriginalRect);
         ShowWindow(hwnd, SW_MINIMIZE);
         return;
     }
@@ -506,17 +521,24 @@ void BSDetachedFloaterHost::draw()
     const S32 dest_width = llmax<S32>(1, client.right - client.left);
     const S32 dest_height = llmax<S32>(1, client.bottom - client.top);
 
-    // Keep the live Conversations hierarchy immutable, but render it directly
-    // into the native window's current pixel dimensions. This avoids scaling a
-    // low-resolution bitmap and removes the blurred-text problem.
-    const S32 logical_width = llmax<S32>(1, mOriginalRect.getWidth());
-    const S32 logical_height = llmax<S32>(1, mOriginalRect.getHeight());
+    // Resize the detached Firestorm floater itself while it is outside the
+    // main viewer hierarchy. This lets tabs/panels reflow normally instead of
+    // stretching the old layout. attach() performs the inverse setShape() back
+    // to mOriginalRect, restoring the original viewer layout recursively.
+    const LLVector2 ui_scale = LLUI::getScaleFactor();
+    const S32 logical_width = llmax<S32>(
+        1, ll_round((F32)dest_width / ui_scale.mV[VX]));
+    const S32 logical_height = llmax<S32>(
+        1, ll_round((F32)dest_height / ui_scale.mV[VY]));
+
+    const LLRect detached_rect(0, logical_height, logical_width, 0);
+    if (mFloater->getRect() != detached_rect)
+    {
+        mFloater->setShape(detached_rect);
+    }
+
     const S32 width = dest_width;
     const S32 height = dest_height;
-    const LLVector2 old_ui_scale = LLUI::getScaleFactor();
-    const LLVector2 render_scale(
-        (F32)width / (F32)logical_width,
-        (F32)height / (F32)logical_height);
 
     if (!mRenderTarget)
     {
@@ -562,10 +584,9 @@ void BSDetachedFloaterHost::draw()
     gGL.loadIdentity();
     gGL.pushUIMatrix();
 
-    // Clip rectangles use LLUI::getScaleFactor(), so temporarily make it match
-    // the detached native window's render scale as well as the matrix.
-    LLUI::setScaleFactor(render_scale);
-    gGL.scaleUI(render_scale.mV[VX], render_scale.mV[VY], 1.f);
+    // Draw at the viewer's native UI scale. The floater hierarchy itself has
+    // already been responsively laid out for the detached client size.
+    gGL.scaleUI(ui_scale.mV[VX], ui_scale.mV[VY], 1.f);
 
     {
         LLGLSUIDefault gls_ui;
@@ -582,7 +603,6 @@ void BSDetachedFloaterHost::draw()
     }
 
     gGL.popUIMatrix();
-    LLUI::setScaleFactor(old_ui_scale);
 
     gGL.matrixMode(LLRender::MM_MODELVIEW);
     gGL.popMatrix();
