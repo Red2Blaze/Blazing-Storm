@@ -98,6 +98,25 @@ void BSDetachedFloaterHost::attach()
     }
 }
 
+void BSDetachedFloaterHost::setAlwaysOnTop(bool enabled)
+{
+    mAlwaysOnTop = enabled;
+
+#ifdef LL_WINDOWS
+    if (!mNativeWindow)
+    {
+        return;
+    }
+
+    HWND hwnd = static_cast<HWND>(mNativeWindow);
+    SetWindowPos(
+        hwnd,
+        enabled ? HWND_TOPMOST : HWND_NOTOPMOST,
+        0, 0, 0, 0,
+        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+#endif
+}
+
 #ifdef LL_WINDOWS
 namespace
 {
@@ -191,23 +210,6 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
     return true;
-}
-
-void BSDetachedFloaterHost::setAlwaysOnTop(bool enabled)
-{
-    mAlwaysOnTop = enabled;
-
-    if (!mNativeWindow)
-    {
-        return;
-    }
-
-    HWND hwnd = static_cast<HWND>(mNativeWindow);
-    SetWindowPos(
-        hwnd,
-        enabled ? HWND_TOPMOST : HWND_NOTOPMOST,
-        0, 0, 0, 0,
-        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
 }
 
 void BSDetachedFloaterHost::destroyNativeWindow()
@@ -689,8 +691,8 @@ long long __stdcall BSDetachedFloaterHost::windowProc(
                     ll_round((F32)self->mFloater->getHeaderHeight() *
                              (F32)height / (F32)logical_height));
                 const S32 button_reserve = llmax<S32>(
-                    64,
-                    ll_round(72.f * (F32)width /
+                    110,
+                    ll_round(116.f * (F32)width /
                              (F32)llmax<S32>(
                                  1, self->mOriginalRect.getWidth())));
 
