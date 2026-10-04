@@ -9,6 +9,7 @@
 #include "llfloater.h"
 #include "llview.h"
 #include "llrender.h"
+#include "llglheaders.h"
 #include "llui.h"
 #include "llviewerwindow.h"
 #include "llglslshader.h"
@@ -222,16 +223,48 @@ bool BSDetachedFloaterHost::createGLSurface()
         return false;
     }
 
-    HGLRC rc = wglCreateContext(dc);
-    if (!rc || !wglShareLists(main_rc, rc))
+    HGLRC rc = nullptr;
+
+    // Prefer the same modern profile/version as the viewer. The share context
+    // is supplied at creation time, which is more reliable than creating a
+    // legacy context and calling wglShareLists() afterward.
+    if (wglCreateContextAttribsARB)
     {
-        if (rc)
+        GLint major = 3;
+        GLint minor = 0;
+        glGetIntegerv(GL_MAJOR_VERSION, &major);
+        glGetIntegerv(GL_MINOR_VERSION, &minor);
+
+        const int attribs[] =
+        {
+            WGL_CONTEXT_MAJOR_VERSION_ARB, major,
+            WGL_CONTEXT_MINOR_VERSION_ARB, minor,
+            WGL_CONTEXT_PROFILE_MASK_ARB,
+                LLRender::sGLCoreProfile
+                    ? WGL_CONTEXT_CORE_PROFILE_BIT_ARB
+                    : WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+            0
+        };
+
+        rc = wglCreateContextAttribsARB(dc, main_rc, attribs);
+    }
+
+    // Conservative fallback for older drivers.
+    if (!rc)
+    {
+        rc = wglCreateContext(dc);
+        if (rc && !wglShareLists(main_rc, rc))
         {
             wglDeleteContext(rc);
+            rc = nullptr;
         }
+    }
+
+    if (!rc)
+    {
         ReleaseDC(hwnd, dc);
         LL_WARNS("DetachedFloaters")
-            << "Unable to create shared OpenGL context." << LL_ENDL;
+            << "Unable to create a shared OpenGL context." << LL_ENDL;
         return false;
     }
 
