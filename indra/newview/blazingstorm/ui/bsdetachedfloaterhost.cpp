@@ -92,8 +92,8 @@ void BSDetachedFloaterHost::attach()
 
     if (floater && parent)
     {
-        parent->addChild(floater);
         floater->setShape(original_rect);
+        parent->addChild(floater);
         parent->sendChildToFront(floater);
     }
 }
@@ -684,17 +684,14 @@ long long __stdcall BSDetachedFloaterHost::windowProc(
 
                 // Treat the Firestorm header itself as the OS drag region, but
                 // reserve the right side for Firestorm's minimize/close buttons.
-                const S32 logical_height =
-                    llmax<S32>(1, self->mOriginalRect.getHeight());
+                const LLVector2 ui_scale = LLUI::getScaleFactor();
                 const S32 header_px = llmax<S32>(
                     20,
                     ll_round((F32)self->mFloater->getHeaderHeight() *
-                             (F32)height / (F32)logical_height));
+                             ui_scale.mV[VY]));
                 const S32 button_reserve = llmax<S32>(
                     110,
-                    ll_round(116.f * (F32)width /
-                             (F32)llmax<S32>(
-                                 1, self->mOriginalRect.getWidth())));
+                    ll_round(116.f * ui_scale.mV[VX]));
 
                 if (pt.y < header_px && pt.x < width - button_reserve)
                 {
