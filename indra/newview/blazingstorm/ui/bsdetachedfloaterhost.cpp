@@ -246,16 +246,17 @@ void BSDetachedFloaterHost::dispatchMouseMessage(
     const S32 y = height - 1 - point.y;
     const MASK mask = detachedMask(true);
 
-    const LLVector2 ui_scale = LLUI::getScaleFactor();
-    const S32 logical_width =
-        llmax<S32>(1, ll_round((F32)width / ui_scale.mV[VX]));
-    const S32 logical_height =
-        llmax<S32>(1, ll_round((F32)height / ui_scale.mV[VY]));
+    // Keep the live Conversations hierarchy at its original Firestorm layout
+    // size. Scale native-window coordinates back into that immutable layout.
+    const S32 logical_width = llmax<S32>(1, mOriginalRect.getWidth());
+    const S32 logical_height = llmax<S32>(1, mOriginalRect.getHeight());
 
-    mFloater->setShape(LLRect(0, logical_height, logical_width, 0));
-
-    const S32 ui_x = ll_round((F32)x / ui_scale.mV[VX]);
-    const S32 ui_y = ll_round((F32)y / ui_scale.mV[VY]);
+    const S32 ui_x = llclamp(
+        ll_round((F32)x * (F32)logical_width / (F32)width),
+        0, logical_width - 1);
+    const S32 ui_y = llclamp(
+        ll_round((F32)y * (F32)logical_height / (F32)height),
+        0, logical_height - 1);
 
     switch (message)
     {
@@ -386,7 +387,9 @@ void BSDetachedFloaterHost::dispatchKeyMessage(
     }
 }
 
-void BSDetachedFloaterHost::presentPixels(S32 width, S32 height)
+void BSDetachedFloaterHost::presentPixels(
+    S32 source_width, S32 source_height,
+    S32 dest_width, S32 dest_height)
 {
     if (!mNativeWindow || mPixelBuffer.empty())
     {
@@ -402,17 +405,17 @@ void BSDetachedFloaterHost::presentPixels(S32 width, S32 height)
 
     BITMAPINFO bitmap = {};
     bitmap.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bitmap.bmiHeader.biWidth = width;
+    bitmap.bmiHeader.biWidth = source_width;
     // Positive height means a bottom-up DIB, matching glReadPixels().
-    bitmap.bmiHeader.biHeight = height;
+    bitmap.bmiHeader.biHeight = source_height;
     bitmap.bmiHeader.biPlanes = 1;
     bitmap.bmiHeader.biBitCount = 32;
     bitmap.bmiHeader.biCompression = BI_RGB;
 
     StretchDIBits(
         dc,
-        0, 0, width, height,
-        0, 0, width, height,
+        0, 0, dest_width, dest_height,
+        0, 0, source_width, source_height,
         mPixelBuffer.data(),
         &bitmap,
         DIB_RGB_COLORS,
@@ -439,17 +442,18 @@ void BSDetachedFloaterHost::draw()
         return;
     }
 
-    const S32 width = llmax<S32>(1, client.right - client.left);
-    const S32 height = llmax<S32>(1, client.bottom - client.top);
+    const S32 dest_width = llmax<S32>(1, client.right - client.left);
+    const S32 dest_height = llmax<S32>(1, client.bottom - client.top);
     const LLVector2 ui_scale = LLUI::getScaleFactor();
-    const S32 logical_width =
-        llmax<S32>(1, ll_round((F32)width / ui_scale.mV[VX]));
-    const S32 logical_height =
-        llmax<S32>(1, ll_round((F32)height / ui_scale.mV[VY]));
 
-    // Keep the detached floater laid out for the native window. Its original
-    // shape is restored by attach().
-    mFloater->setShape(LLRect(0, logical_height, logical_width, 0));
+    // Never reshape the live LLMultiFloater while detached. Reshaping it
+    // mutates the hosted IM/tab layouts and corrupts Conversations on reattach.
+    const S32 logical_width = llmax<S32>(1, mOriginalRect.getWidth());
+    const S32 logical_height = llmax<S32>(1, mOriginalRect.getHeight());
+    const S32 width = llmax<S32>(
+        1, ll_round((F32)logical_width * ui_scale.mV[VX]));
+    const S32 height = llmax<S32>(
+        1, ll_round((F32)logical_height * ui_scale.mV[VY]));
 
     if (!mRenderTarget)
     {
@@ -527,7 +531,7 @@ void BSDetachedFloaterHost::draw()
 
     // Presentation is deliberately GDI for the MVP. It avoids introducing a
     // second OpenGL context while we validate detach/reattach and input.
-    presentPixels(width, height);
+    presentPixels(width, height, dest_width, dest_height);
 }
 
 long long __stdcall BSDetachedFloaterHost::windowProc(
