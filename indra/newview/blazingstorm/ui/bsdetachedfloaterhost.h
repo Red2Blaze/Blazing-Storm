@@ -42,7 +42,8 @@ private:
     S32 mRenderWidth = 0;
     S32 mRenderHeight = 0;
     void pumpMessages();
-    void presentPixels(S32 width, S32 height);
+    void presentPixels(S32 source_width, S32 source_height,
+                       S32 dest_width, S32 dest_height);
     void dispatchMouseMessage(unsigned int message, unsigned long long wparam, long long lparam);
     void dispatchKeyMessage(unsigned int message, unsigned long long wparam, long long lparam);
     static long long __stdcall windowProc(void* hwnd, unsigned int message,
