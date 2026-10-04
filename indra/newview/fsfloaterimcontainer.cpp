@@ -37,6 +37,7 @@
 #include "fsfloaternearbychat.h"
 #include "llfloaterreg.h"
 #include "llbutton.h"
+#include "llmenugl.h"
 #include "lluictrlfactory.h"
 #include "llchiclet.h"
 #include "llchicletbar.h"
@@ -62,6 +63,7 @@ FSFloaterIMContainer::FSFloaterIMContainer(const LLSD& seed)
     mCurrentVoiceState(VOICE_STATE_NONE),
     mForceVoiceStateUpdate(false),
     mAlwaysOnTopButton(nullptr),
+    mDetachedMenuHolder(nullptr),
     mIsAddingNewSession(false)
 {
     mAutoResize = false;
@@ -100,17 +102,19 @@ bool FSFloaterIMContainer::postBuild()
     // native detached window. It toggles the HWND's independent TOPMOST state.
     LLButton::Params top_button;
     top_button.name("detached_always_on_top");
-    top_button.label("TOP");
-    top_button.label_selected("TOP");
+    // UTF-8 U+1F4CC PUSHPIN. Using a glyph keeps the control compact and
+    // avoids the old "TOP" label being clipped to "TO".
+    top_button.label("\xF0\x9F\x93\x8C");
+    top_button.label_selected("\xF0\x9F\x93\x8C");
     top_button.tool_tip("Always on top");
     top_button.is_toggle(true);
     top_button.tab_stop(false);
     top_button.chrome(true);
     top_button.follows.flags(FOLLOWS_TOP | FOLLOWS_RIGHT);
     top_button.rect(LLRect(
-        getRect().getWidth() - 75,
+        getRect().getWidth() - 72,
         getRect().getHeight() - 2,
-        getRect().getWidth() - 45,
+        getRect().getWidth() - 46,
         getRect().getHeight() - 20));
     top_button.click_callback.function(
         boost::bind(&FSFloaterIMContainer::onAlwaysOnTopClicked,
@@ -120,6 +124,17 @@ bool FSFloaterIMContainer::postBuild()
     addChild(mAlwaysOnTopButton);
     mAlwaysOnTopButton->setVisible(false);
     sendChildToFront(mAlwaysOnTopButton);
+
+    // Dedicated transient-menu layer for native detached Conversations.
+    // LLMenuGL::showPopup() detects this holder by UI root and reparents
+    // menus/submenus here instead of the main viewer's gMenuHolder.
+    LLMenuHolderGL::Params menu_holder;
+    menu_holder.name("detached_menu_holder");
+    menu_holder.rect(getLocalRect());
+    menu_holder.follows.flags(FOLLOWS_ALL);
+    menu_holder.visible(false);
+    mDetachedMenuHolder = new LLMenuHolderGL(menu_holder);
+    addChild(mDetachedMenuHolder);
 
     return true;
 }
@@ -641,6 +656,19 @@ void FSFloaterIMContainer::draw()
             mAlwaysOnTopButton->setToggleState(
                 BSDetachedFloaterHost::instance().isAlwaysOnTop());
             sendChildToFront(mAlwaysOnTopButton);
+        }
+
+        if (mDetachedMenuHolder)
+        {
+            mDetachedMenuHolder->setVisible(detached);
+            if (detached)
+            {
+                sendChildToFront(mDetachedMenuHolder);
+            }
+            else
+            {
+                mDetachedMenuHolder->hideMenus();
+            }
         }
     }
 
