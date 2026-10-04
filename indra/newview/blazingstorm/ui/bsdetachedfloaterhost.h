@@ -6,9 +6,11 @@
 #define BS_DETACHED_FLOATER_HOST_H
 
 #include "llsingleton.h"
+#include "llrect.h"
 #include <string>
 
 class LLFloater;
+class LLView;
 
 class BSDetachedFloaterHost final : public LLSingleton<BSDetachedFloaterHost>
 {
@@ -27,6 +29,8 @@ public:
 
 private:
     LLFloater* mFloater = nullptr;
+    LLView* mOriginalParent = nullptr;
+    LLRect mOriginalRect;
 
 #ifdef LL_WINDOWS
     void* mNativeWindow = nullptr;
@@ -34,6 +38,9 @@ private:
     void* mGLContext = nullptr;
     bool createGLSurface();
     void destroyGLSurface();
+    void pumpMessages();
+    void dispatchMouseMessage(unsigned int message, unsigned long long wparam, long long lparam);
+    void dispatchKeyMessage(unsigned int message, unsigned long long wparam, long long lparam);
     static long long __stdcall windowProc(void* hwnd, unsigned int message,
                                            unsigned long long wparam, long long lparam);
     bool createNativeWindow(const std::string& title);
