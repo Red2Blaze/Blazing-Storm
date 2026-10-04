@@ -132,6 +132,9 @@ bool FSFloaterIMContainer::postBuild()
     menu_holder.name("detached_menu_holder");
     menu_holder.rect(getLocalRect());
     menu_holder.follows.flags(FOLLOWS_ALL);
+    // A full-size menu layer must not behave like an invisible glass pane
+    // when no menu is open. Its menu children still receive their clicks.
+    menu_holder.mouse_opaque(false);
     menu_holder.visible(false);
     mDetachedMenuHolder = new LLMenuHolderGL(menu_holder);
     addChild(mDetachedMenuHolder);
