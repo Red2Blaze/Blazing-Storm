@@ -3913,6 +3913,12 @@ void LLMenuHolderGL::draw()
 
 bool LLMenuHolderGL::handleMouseDown( S32 x, S32 y, MASK mask )
 {
+    // Remember whether there was a menu before processing the click. Detached
+    // menu holders are mouse-transparent when idle, but an outside click while
+    // a menu is open must close the menu without falling through to controls
+    // underneath it.
+    const bool had_visible_menu = hasVisibleMenu();
+
     bool handled = LLView::childrenHandleMouseDown(x, y, mask) != NULL;
     if (!handled)
     {
@@ -3929,24 +3935,27 @@ bool LLMenuHolderGL::handleMouseDown( S32 x, S32 y, MASK mask )
                 hideMenus();
             }
         }
-        else
+        else if (had_visible_menu)
         {
-            // no visible parent, clicked off of menu, hide them all
+            // clicked off of the open menu
             hideMenus();
         }
     }
-    return handled;
+
+    return handled || had_visible_menu;
 }
 
 bool LLMenuHolderGL::handleRightMouseDown( S32 x, S32 y, MASK mask )
 {
+    const bool had_visible_menu = hasVisibleMenu();
     bool handled = LLView::childrenHandleRightMouseDown(x, y, mask) != NULL;
-    if (!handled)
+    if (!handled && had_visible_menu)
     {
-        // clicked off of menu, hide them all
+        // clicked off of an open menu: close it and consume this click so it
+        // does not immediately trigger a control underneath.
         hideMenus();
     }
-    return handled;
+    return handled || had_visible_menu;
 }
 
 // This occurs when you mouse-down to spawn a context menu, hold the button
