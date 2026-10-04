@@ -5834,6 +5834,13 @@ void LLVolumeGeometryManager::registerFace(LLSpatialGroup* group, LLFace* facep,
         draw_info->mAvatar = facep->mAvatar;
         draw_info->mSkinInfo = facep->mSkinInfo;
 
+        // Keep the wearer/control avatar even for non-rigged attachment faces.
+        // World geometry has no avatar and therefore remains null.
+        if (LLViewerObject* vobj = facep->getViewerObject())
+        {
+            draw_info->mAttachedToAvatar = vobj->getAvatar();
+        }
+
         if (gltf_mat)
         {
             // just remember the material ID, render pools will reference the GLTF material
