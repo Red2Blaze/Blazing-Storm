@@ -30,11 +30,15 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "fsfloaterimcontainer.h"
+#include "blazingstorm/ui/bsdetachedfloaterhost.h"
 
 #include "fsfloatercontacts.h"
 #include "fsfloaterim.h"
 #include "fsfloaternearbychat.h"
 #include "llfloaterreg.h"
+#include "llbutton.h"
+#include "llmenugl.h"
+#include "lluictrlfactory.h"
 #include "llchiclet.h"
 #include "llchicletbar.h"
 #include "llemojihelper.h"
@@ -58,6 +62,8 @@ FSFloaterIMContainer::FSFloaterIMContainer(const LLSD& seed)
     mActiveVoiceFloater(nullptr),
     mCurrentVoiceState(VOICE_STATE_NONE),
     mForceVoiceStateUpdate(false),
+    mAlwaysOnTopButton(nullptr),
+    mDetachedMenuHolder(nullptr),
     mIsAddingNewSession(false)
 {
     mAutoResize = false;
@@ -91,6 +97,47 @@ bool FSFloaterIMContainer::postBuild()
     mActiveVoiceUpdateTimer.start();
 
     gSavedSettings.getControl("FSShowConversationVoiceStateIndicator")->getSignal()->connect(boost::bind(&FSFloaterIMContainer::onVoiceStateIndicatorChanged, this, _2));
+
+    // Blazing Storm: this button is only visible while Conversations is in a
+    // native detached window. It toggles the HWND's independent TOPMOST state.
+    LLButton::Params top_button;
+    top_button.name("detached_always_on_top");
+    // UTF-8 U+1F4CC PUSHPIN. Using a glyph keeps the control compact and
+    // avoids the old "TOP" label being clipped to "TO".
+    top_button.label("\xF0\x9F\x93\x8C");
+    top_button.label_selected("\xF0\x9F\x93\x8C");
+    top_button.tool_tip("Always on top");
+    top_button.is_toggle(true);
+    top_button.tab_stop(false);
+    top_button.chrome(true);
+    top_button.follows.flags(FOLLOWS_TOP | FOLLOWS_RIGHT);
+    top_button.rect(LLRect(
+        getRect().getWidth() - 72,
+        getRect().getHeight() - 2,
+        getRect().getWidth() - 46,
+        getRect().getHeight() - 20));
+    top_button.click_callback.function(
+        boost::bind(&FSFloaterIMContainer::onAlwaysOnTopClicked,
+                    this, _1, _2));
+
+    mAlwaysOnTopButton = LLUICtrlFactory::create<LLButton>(top_button);
+    addChild(mAlwaysOnTopButton);
+    mAlwaysOnTopButton->setVisible(false);
+    sendChildToFront(mAlwaysOnTopButton);
+
+    // Dedicated transient-menu layer for native detached Conversations.
+    // LLMenuGL::showPopup() detects this holder by UI root and reparents
+    // menus/submenus here instead of the main viewer's gMenuHolder.
+    LLMenuHolderGL::Params menu_holder;
+    menu_holder.name("detached_menu_holder");
+    menu_holder.rect(getLocalRect());
+    menu_holder.follows.flags(FOLLOWS_ALL);
+    // A full-size menu layer must not behave like an invisible glass pane
+    // when no menu is open. Its menu children still receive their clicks.
+    menu_holder.mouse_opaque(false);
+    menu_holder.visible(false);
+    mDetachedMenuHolder = new LLMenuHolderGL(menu_holder);
+    addChild(mDetachedMenuHolder);
 
     return true;
 }
@@ -583,9 +630,51 @@ void FSFloaterIMContainer::onVoiceStateIndicatorChanged(const LLSD& data)
     }
 }
 
+void FSFloaterIMContainer::onAlwaysOnTopClicked(LLUICtrl*, const LLSD&)
+{
+    BSDetachedFloaterHost& host = BSDetachedFloaterHost::instance();
+    if (host.isDetached(this))
+    {
+        host.toggleAlwaysOnTop();
+    }
+
+    if (mAlwaysOnTopButton)
+    {
+        mAlwaysOnTopButton->setToggleState(host.isAlwaysOnTop());
+    }
+}
+
 // virtual
 void FSFloaterIMContainer::draw()
 {
+    if (mAlwaysOnTopButton)
+    {
+        const bool detached =
+            BSDetachedFloaterHost::instanceExists() &&
+            BSDetachedFloaterHost::instance().isDetached(this);
+
+        mAlwaysOnTopButton->setVisible(detached);
+        if (detached)
+        {
+            mAlwaysOnTopButton->setToggleState(
+                BSDetachedFloaterHost::instance().isAlwaysOnTop());
+            sendChildToFront(mAlwaysOnTopButton);
+        }
+
+        if (mDetachedMenuHolder)
+        {
+            mDetachedMenuHolder->setVisible(detached);
+            if (detached)
+            {
+                sendChildToFront(mDetachedMenuHolder);
+            }
+            else
+            {
+                mDetachedMenuHolder->hideMenus();
+            }
+        }
+    }
+
     static LLCachedControl<bool> fsShowConversationVoiceStateIndicator(gSavedSettings, "FSShowConversationVoiceStateIndicator");
     if (fsShowConversationVoiceStateIndicator && (mActiveVoiceUpdateTimer.hasExpired() || mForceVoiceStateUpdate))
     {

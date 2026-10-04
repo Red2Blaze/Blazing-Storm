@@ -31,6 +31,14 @@
 			parameter="blocklist"/>
 	</menu_item_check>
 	<menu_item_separator/>
+	<menu_item_call
+		label="Pop Out Conversations to Desktop (experimental)"
+		name="pop_out_native">
+		<menu_item_call.on_click
+			function="ChatOptions.Action"
+			parameter="pop_out_native"/>
+	</menu_item_call>
+	<menu_item_separator/>
 	<menu_item_check
 		label="Use V1 style chat headers"
 		name="plain_text_chat_history">

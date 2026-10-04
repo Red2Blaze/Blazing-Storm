@@ -30,6 +30,7 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "fsfloaterim.h"
+#include "blazingstorm/ui/bsdetachedfloaterhost.h"
 #include "blazingstorm/remote/bsrequestactions.h" // <BlazingStorm>
 
 #include "fschathistory.h"
@@ -748,6 +749,21 @@ bool FSFloaterIM::checkEnabled(const LLSD& userdata)
 
 void FSFloaterIM::onChatOptionsContextMenuItemClicked(const LLSD& userdata)
 {
+    if (userdata.asString() == "pop_out_native")
+    {
+        FSFloaterIMContainer* conversations = FSFloaterIMContainer::getInstance();
+        if (BSDetachedFloaterHost::instance().isDetached(conversations))
+        {
+            BSDetachedFloaterHost::instance().attach();
+        }
+        else
+        {
+            BSDetachedFloaterHost::instance().detach(
+                conversations, "Blazing Storm - Conversations");
+        }
+        return;
+    }
+
     FSChatOptionsMenu::onMenuItemClick(userdata, this);
 }
 

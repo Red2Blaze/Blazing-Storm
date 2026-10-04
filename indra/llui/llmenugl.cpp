@@ -65,6 +65,51 @@
 #include "llclipboard.h" // <FS:ND/ To let someone copy a menus text + accelerator to clipboard
 // static
 LLMenuHolderGL *LLMenuGL::sMenuContainer = NULL;
+
+LLMenuHolderGL* LLMenuGL::getMenuContainer(const LLView* context)
+{
+    if (!context)
+    {
+        return sMenuContainer;
+    }
+
+    // If the context is already inside a holder, use that holder.
+    for (LLView* view = const_cast<LLView*>(context);
+         view;
+         view = view->getParent())
+    {
+        if (LLMenuHolderGL* holder = dynamic_cast<LLMenuHolderGL*>(view))
+        {
+            return holder;
+        }
+    }
+
+    LLView* root = const_cast<LLView*>(context)->getRootView();
+    if (!root)
+    {
+        return sMenuContainer;
+    }
+
+    // Normal viewer controls keep using the global holder.
+    if (sMenuContainer && sMenuContainer->getRootView() == root)
+    {
+        return sMenuContainer;
+    }
+
+    // Detached/alternate UI roots may contain their own menu holder.
+    for (LLView::tree_iterator_t it = root->beginTreeDFS();
+         it != root->endTreeDFS();
+         ++it)
+    {
+        if (LLMenuHolderGL* holder = dynamic_cast<LLMenuHolderGL*>(*it))
+        {
+            return holder;
+        }
+    }
+
+    return sMenuContainer;
+}
+
 view_listener_t::listener_map_t view_listener_t::sListeners;
 
 S32 MENU_BAR_HEIGHT = 18;
@@ -417,7 +462,10 @@ void LLMenuItemGL::onCommit( void )
     if (!getMenu()->getTornOff()
         && getMenu()->getVisible())
     {
-        LLMenuGL::sMenuContainer->hideMenus();
+        if (LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(getMenu()))
+        {
+            holder->hideMenus();
+        }
     }
 
     LLUICtrl::onCommit();
@@ -1207,10 +1255,11 @@ void LLMenuItemBranchGL::draw()
 
 void LLMenuItemBranchGL::updateBranchParent(LLView* parentp)
 {
-    if (getBranch() && getBranch()->getParent() == NULL)
+    LLMenuGL* branch = getBranch();
+    if (branch && !branch->getTornOff() && branch->getParent() != parentp)
     {
-        // make the branch menu a sibling of my parent menu
-        getBranch()->updateParent(parentp);
+        // Keep the whole submenu chain in the same menu holder as its root.
+        branch->updateParent(parentp);
     }
 }
 
@@ -1305,8 +1354,15 @@ void LLMenuItemBranchGL::openMenu()
     }
     else if( !branch->getVisible() )
     {
+        LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(getMenu());
+        if (holder && branch->getParent() != holder)
+        {
+            branch->updateParent(holder);
+        }
+
         // get valid rectangle for menus
-        const LLRect menu_region_rect = LLMenuGL::sMenuContainer->getMenuRect();
+        const LLRect menu_region_rect =
+            holder ? holder->getMenuRect() : LLRect(0, S32_MAX, S32_MAX, 0);
 
         branch->arrange();
 
@@ -1448,6 +1504,12 @@ void LLMenuItemBranchDownGL::openMenu( void )
         }
         else
         {
+            LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(getMenu());
+            if (holder && branch->getParent() != holder)
+            {
+                branch->updateParent(holder);
+            }
+
             // We're showing the drop-down menu, so patch up its labels/rects
             branch->arrange();
 
@@ -1456,27 +1518,27 @@ void LLMenuItemBranchDownGL::openMenu( void )
             S32 top = getRect().mBottom;
             localPointToOtherView(left, top, &left, &top, branch->getParent());
 
-            rect.setLeftTopAndSize( left, top,
-                                    rect.getWidth(), rect.getHeight() );
-            branch->setRect( rect );
-            S32 x = 0;
-            S32 y = 0;
-            branch->localPointToScreen( 0, 0, &x, &y );
-            S32 delta_x = 0;
+            rect.setLeftTopAndSize(left, top,
+                                   rect.getWidth(), rect.getHeight());
+            branch->setRect(rect);
 
-            LLCoordScreen window_size;
-            LLWindow* windowp = getWindow();
-            windowp->getSize(&window_size);
-
-            S32 window_width = window_size.mX;
-            if( x > window_width - rect.getWidth() )
+            if (holder)
             {
-                delta_x = (window_width - rect.getWidth()) - x;
+                const LLRect region = holder->getMenuRect();
+                S32 delta_x = 0;
+                if (branch->getRect().mRight > region.mRight)
+                {
+                    delta_x = region.mRight - branch->getRect().mRight;
+                }
+                else if (branch->getRect().mLeft < region.mLeft)
+                {
+                    delta_x = region.mLeft - branch->getRect().mLeft;
+                }
+                branch->translate(delta_x, 0);
             }
-            branch->translate( delta_x, 0 );
 
             setHighlight(true);
-            branch->setVisible( true );
+            branch->setVisible(true);
             branch->getParent()->sendChildToFront(branch);
         }
     }
@@ -1528,7 +1590,10 @@ bool LLMenuItemBranchDownGL::handleMouseDown( S32 x, S32 y, MASK mask )
 
     if (getVisible() && isOpen())
     {
-        LLMenuGL::sMenuContainer->hideMenus();
+        if (LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(getMenu()))
+        {
+            holder->hideMenus();
+        }
     }
     else
     {
@@ -2131,7 +2196,9 @@ void LLMenuGL::arrange( void )
 
     if( mItems.size() )
     {
-        const LLRect menu_region_rect = LLMenuGL::sMenuContainer ? LLMenuGL::sMenuContainer->getMenuRect() : LLRect(0, S32_MAX, S32_MAX, 0);
+        LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(this);
+        const LLRect menu_region_rect =
+            holder ? holder->getMenuRect() : LLRect(0, S32_MAX, S32_MAX, 0);
 
         // torn off menus are not constrained to the size of the screen
         U32 max_width = getTornOff() ? U32_MAX : menu_region_rect.getWidth();
@@ -2475,7 +2542,7 @@ void LLMenuGL::createSpilloverBranch()
         p.bg_visible(true);
         p.can_tear_off(false);
         mSpilloverMenu = new LLMenuGL(p);
-        mSpilloverMenu->updateParent(LLMenuGL::sMenuContainer);
+        mSpilloverMenu->updateParent(LLMenuGL::getMenuContainer(this));
 
         LLMenuItemBranchGL::Params branch_params;
         branch_params.name = "More";
@@ -2750,7 +2817,7 @@ bool LLMenuGL::appendMenu( LLMenuGL* menu )
 
     // Inherit colors
     menu->setBackgroundColor( mBackgroundColor );
-    menu->updateParent(LLMenuGL::sMenuContainer);
+    menu->updateParent(LLMenuGL::getMenuContainer(this));
     return success;
 }
 
@@ -2773,7 +2840,10 @@ bool LLMenuGL::appendContextSubMenu(LLMenuGL *menu)
     p.highlight_fg_color=LLUIColorTable::instance().getColor("MenuItemHighlightFgColor");
 
     item = LLUICtrlFactory::create<LLContextMenuBranch>(p);
-    LLMenuGL::sMenuContainer->addChild(item->getBranch());
+    if (LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(this))
+    {
+        holder->addChild(item->getBranch());
+    }
 
     return append( item );
 }
@@ -3375,6 +3445,13 @@ void LLMenuGL::showPopup(LLView* spawning_view, LLMenuGL* menu, S32 x, S32 y, S3
         return;
     }
 
+    LLMenuHolderGL* menu_container = LLMenuGL::getMenuContainer(spawning_view);
+    if (menu_container && !menu->getTornOff() &&
+        menu->getParent() != menu_container)
+    {
+        menu->updateParent(menu_container);
+    }
+
     menu->setVisible( true );
 
     if(!menu->getAlwaysShowMenu())
@@ -3414,13 +3491,26 @@ void LLMenuGL::showPopup(LLView* spawning_view, LLMenuGL* menu, S32 x, S32 y, S3
         // If the mouse doesn't move, the menu will stay open ala the Mac.
         // See also LLContextMenu::show()
 
-        LLUI::getInstance()->getMousePositionLocal(menu->getParent(), &mouse_x, &mouse_y);
+        if (menu_container && menu_container != LLMenuGL::sMenuContainer)
+        {
+            mouse_x = x;
+            mouse_y = y;
+            spawning_view->localPointToOtherView(
+                mouse_x, mouse_y, &mouse_x, &mouse_y, menu->getParent());
+        }
+        else
+        {
+            LLUI::getInstance()->getMousePositionLocal(
+                menu->getParent(), &mouse_x, &mouse_y);
+        }
     }
 
 
     LLMenuHolderGL::sContextMenuSpawnPos.set(mouse_x,mouse_y);
 
-    const LLRect menu_region_rect = LLMenuGL::sMenuContainer->getRect();
+    const LLRect menu_region_rect =
+        menu_container ? menu_container->getMenuRect()
+                       : LLRect(0, S32_MAX, S32_MAX, 0);
 
     const S32 HPAD = 2;
     LLRect rect = menu->getRect();
@@ -3449,7 +3539,14 @@ void LLMenuGL::showPopup(LLView* spawning_view, LLMenuGL* menu, S32 x, S32 y, S3
         // not enough space: align with top, ignore exclusion
         menu->translateIntoRect( menu_region_rect );
     }
-    menu->getParent()->sendChildToFront(menu);
+    if (menu_container)
+    {
+        menu_container->sendChildToFront(menu);
+    }
+    else if (menu->getParent())
+    {
+        menu->getParent()->sendChildToFront(menu);
+    }
 }
 
 ///============================================================================
@@ -3816,6 +3913,12 @@ void LLMenuHolderGL::draw()
 
 bool LLMenuHolderGL::handleMouseDown( S32 x, S32 y, MASK mask )
 {
+    // Remember whether there was a menu before processing the click. Detached
+    // menu holders are mouse-transparent when idle, but an outside click while
+    // a menu is open must close the menu without falling through to controls
+    // underneath it.
+    const bool had_visible_menu = hasVisibleMenu();
+
     bool handled = LLView::childrenHandleMouseDown(x, y, mask) != NULL;
     if (!handled)
     {
@@ -3832,24 +3935,27 @@ bool LLMenuHolderGL::handleMouseDown( S32 x, S32 y, MASK mask )
                 hideMenus();
             }
         }
-        else
+        else if (had_visible_menu)
         {
-            // no visible parent, clicked off of menu, hide them all
+            // clicked off of the open menu
             hideMenus();
         }
     }
-    return handled;
+
+    return handled || had_visible_menu;
 }
 
 bool LLMenuHolderGL::handleRightMouseDown( S32 x, S32 y, MASK mask )
 {
+    const bool had_visible_menu = hasVisibleMenu();
     bool handled = LLView::childrenHandleRightMouseDown(x, y, mask) != NULL;
-    if (!handled)
+    if (!handled && had_visible_menu)
     {
-        // clicked off of menu, hide them all
+        // clicked off of an open menu: close it and consume this click so it
+        // does not immediately trigger a control underneath.
         hideMenus();
     }
-    return handled;
+    return handled || had_visible_menu;
 }
 
 // This occurs when you mouse-down to spawn a context menu, hold the button
@@ -4281,6 +4387,13 @@ void LLContextMenu::show(S32 x, S32 y, LLView* spawning_view)
         // nothing to show, so abort
         return;
     }
+    LLMenuHolderGL* menu_container =
+        LLMenuGL::getMenuContainer(spawning_view ? spawning_view : this);
+    if (menu_container && !getTornOff() && getParent() != menu_container)
+    {
+        updateParent(menu_container);
+    }
+
     // Save click point for detecting cursor moves before mouse-up.
     // Must be in local coords to compare with mouseUp events.
     // If the mouse doesn't move, the menu will stay open ala the Mac.
@@ -4291,7 +4404,9 @@ void LLContextMenu::show(S32 x, S32 y, LLView* spawning_view)
 
     S32 width = getRect().getWidth();
     S32 height = getRect().getHeight();
-    const LLRect menu_region_rect = LLMenuGL::sMenuContainer->getMenuRect();
+    const LLRect menu_region_rect =
+        menu_container ? menu_container->getMenuRect()
+                       : LLRect(0, S32_MAX, S32_MAX, 0);
     LLView* parent_view = getParent();
 
     // Open upwards if menu extends past bottom
@@ -4484,7 +4599,10 @@ bool LLContextMenu::handleRightMouseUp( S32 x, S32 y, MASK mask )
 
     if (!mHoveredAnyItem && !pointInView(local_x, local_y))
     {
-        sMenuContainer->hideMenus();
+        if (LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(this))
+        {
+            holder->hideMenus();
+        }
         return true;
     }
 

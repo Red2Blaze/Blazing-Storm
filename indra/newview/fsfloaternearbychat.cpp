@@ -86,6 +86,7 @@
 #include "NACLantispam.h"
 // </FS:TS> FIRE-23123
 #include "lfsimfeaturehandler.h"
+#include "blazingstorm/ui/bsdetachedfloaterhost.h"
 
 S32 FSFloaterNearbyChat::sLastSpecialChatChannel = 0;
 
@@ -422,6 +423,23 @@ void FSFloaterNearbyChat::onSearchButtonClicked()
 
 void FSFloaterNearbyChat::onChatOptionsContextMenuItemClicked(const LLSD& userdata)
 {
+    if (userdata.asString() == "pop_out_native")
+    {
+        // Nearby Chat normally lives inside the Conversations multi-floater.
+        // Detach that root so Nearby Chat and every IM tab move together.
+        FSFloaterIMContainer* conversations = FSFloaterIMContainer::getInstance();
+        if (BSDetachedFloaterHost::instance().isDetached(conversations))
+        {
+            BSDetachedFloaterHost::instance().attach();
+        }
+        else
+        {
+            BSDetachedFloaterHost::instance().detach(
+                conversations, "Blazing Storm - Conversations");
+        }
+        return;
+    }
+
     FSChatOptionsMenu::onMenuItemClick(userdata, this);
 }
 
