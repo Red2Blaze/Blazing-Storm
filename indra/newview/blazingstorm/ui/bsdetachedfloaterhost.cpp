@@ -47,14 +47,16 @@ bool BSDetachedFloaterHost::detach(LLFloater* floater, const std::string& title)
     attach();
 
 #ifdef LL_WINDOWS
-    if (!createNativeWindow(title))
-    {
-        return false;
-    }
-
     mFloater = floater;
     mOriginalParent = floater->getParent();
     mOriginalRect = floater->getRect();
+
+    if (!createNativeWindow(title))
+    {
+        mFloater = nullptr;
+        mOriginalParent = nullptr;
+        return false;
+    }
 
     // This is a real detach: remove the floater from the viewer's normal
     // hierarchy so it is not also drawn/interacted with in the main window.
@@ -155,13 +157,30 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
         wide_title = L"Blazing Storm";
     }
 
+    // The OS window deliberately has no Windows caption. Firestorm's own
+    // floater header is the visible chrome, making this look like the floater
+    // was pulled straight out of the viewer.
+    const DWORD ex_style = WS_EX_TOOLWINDOW;
+    const DWORD style =
+        WS_POPUP | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+
+    const LLVector2 ui_scale = LLUI::getScaleFactor();
+    const S32 client_width = llmax<S32>(
+        1, ll_round((F32)mOriginalRect.getWidth() * ui_scale.mV[VX]));
+    const S32 client_height = llmax<S32>(
+        1, ll_round((F32)mOriginalRect.getHeight() * ui_scale.mV[VY]));
+
+    HWND owner = gViewerWindow
+        ? static_cast<HWND>(gViewerWindow->getPlatformWindow())
+        : nullptr;
+
     HWND hwnd = CreateWindowExW(
-        WS_EX_APPWINDOW,
+        ex_style,
         BS_DETACHED_WINDOW_CLASS,
         wide_title.c_str(),
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 620, 500,
-        nullptr, nullptr, instance, this);
+        style,
+        CW_USEDEFAULT, CW_USEDEFAULT, client_width, client_height,
+        owner, nullptr, instance, this);
 
     if (!hwnd)
     {
@@ -412,14 +431,32 @@ void BSDetachedFloaterHost::presentPixels(
     bitmap.bmiHeader.biBitCount = 32;
     bitmap.bmiHeader.biCompression = BI_RGB;
 
-    StretchDIBits(
-        dc,
-        0, 0, dest_width, dest_height,
-        0, 0, source_width, source_height,
-        mPixelBuffer.data(),
-        &bitmap,
-        DIB_RGB_COLORS,
-        SRCCOPY);
+    if (source_width == dest_width && source_height == dest_height)
+    {
+        SetDIBitsToDevice(
+            dc,
+            0, 0,
+            source_width, source_height,
+            0, 0,
+            0, source_height,
+            mPixelBuffer.data(),
+            &bitmap,
+            DIB_RGB_COLORS);
+    }
+    else
+    {
+        // Fallback only. Normal detached rendering now produces a frame at
+        // the exact native client size, so this path should be uncommon.
+        SetStretchBltMode(dc, COLORONCOLOR);
+        StretchDIBits(
+            dc,
+            0, 0, dest_width, dest_height,
+            0, 0, source_width, source_height,
+            mPixelBuffer.data(),
+            &bitmap,
+            DIB_RGB_COLORS,
+            SRCCOPY);
+    }
 
     ReleaseDC(hwnd, dc);
 }
@@ -429,31 +466,54 @@ void BSDetachedFloaterHost::draw()
     // This HWND lives on the viewer's main thread, so pump it every frame.
     pumpMessages();
 
-    if (!mFloater || !mNativeWindow ||
-        !IsWindowVisible(static_cast<HWND>(mNativeWindow)) ||
-        IsIconic(static_cast<HWND>(mNativeWindow)))
+    if (!mFloater || !mNativeWindow)
+    {
+        return;
+    }
+
+    HWND hwnd = static_cast<HWND>(mNativeWindow);
+
+    // Let Firestorm's own title-bar buttons behave naturally in the detached
+    // host: X closes/hides Conversations and the minimize button minimizes the
+    // native OS window.
+    if (!mFloater->getVisible())
+    {
+        attach();
+        return;
+    }
+
+    if (mFloater->isMinimized())
+    {
+        mFloater->setMinimized(false);
+        ShowWindow(hwnd, SW_MINIMIZE);
+        return;
+    }
+
+    if (!IsWindowVisible(hwnd) || IsIconic(hwnd))
     {
         return;
     }
 
     RECT client = {};
-    if (!GetClientRect(static_cast<HWND>(mNativeWindow), &client))
+    if (!GetClientRect(hwnd, &client))
     {
         return;
     }
 
     const S32 dest_width = llmax<S32>(1, client.right - client.left);
     const S32 dest_height = llmax<S32>(1, client.bottom - client.top);
-    const LLVector2 ui_scale = LLUI::getScaleFactor();
 
-    // Never reshape the live LLMultiFloater while detached. Reshaping it
-    // mutates the hosted IM/tab layouts and corrupts Conversations on reattach.
+    // Keep the live Conversations hierarchy immutable, but render it directly
+    // into the native window's current pixel dimensions. This avoids scaling a
+    // low-resolution bitmap and removes the blurred-text problem.
     const S32 logical_width = llmax<S32>(1, mOriginalRect.getWidth());
     const S32 logical_height = llmax<S32>(1, mOriginalRect.getHeight());
-    const S32 width = llmax<S32>(
-        1, ll_round((F32)logical_width * ui_scale.mV[VX]));
-    const S32 height = llmax<S32>(
-        1, ll_round((F32)logical_height * ui_scale.mV[VY]));
+    const S32 width = dest_width;
+    const S32 height = dest_height;
+    const LLVector2 old_ui_scale = LLUI::getScaleFactor();
+    const LLVector2 render_scale(
+        (F32)width / (F32)logical_width,
+        (F32)height / (F32)logical_height);
 
     if (!mRenderTarget)
     {
@@ -498,7 +558,11 @@ void BSDetachedFloaterHost::draw()
     gGL.pushMatrix();
     gGL.loadIdentity();
     gGL.pushUIMatrix();
-    gGL.scaleUI(ui_scale.mV[VX], ui_scale.mV[VY], 1.f);
+
+    // Clip rectangles use LLUI::getScaleFactor(), so temporarily make it match
+    // the detached native window's render scale as well as the matrix.
+    LLUI::setScaleFactor(render_scale);
+    gGL.scaleUI(render_scale.mV[VX], render_scale.mV[VY], 1.f);
 
     {
         LLGLSUIDefault gls_ui;
@@ -515,6 +579,8 @@ void BSDetachedFloaterHost::draw()
     }
 
     gGL.popUIMatrix();
+    LLUI::setScaleFactor(old_ui_scale);
+
     gGL.matrixMode(LLRender::MM_MODELVIEW);
     gGL.popMatrix();
     gGL.matrixMode(LLRender::MM_PROJECTION);
@@ -553,6 +619,83 @@ long long __stdcall BSDetachedFloaterHost::windowProc(
 
     switch (message)
     {
+        case WM_NCCALCSIZE:
+            // Remove the Windows non-client frame. Firestorm draws the only
+            // visible title bar/chrome.
+            if (wparam)
+            {
+                return 0;
+            }
+            break;
+
+        case WM_NCHITTEST:
+            if (self && self->mFloater)
+            {
+                POINT pt = {
+                    GET_X_LPARAM(static_cast<LPARAM>(lparam)),
+                    GET_Y_LPARAM(static_cast<LPARAM>(lparam))
+                };
+                ScreenToClient(hwnd, &pt);
+
+                RECT rc = {};
+                GetClientRect(hwnd, &rc);
+                const S32 width = llmax<S32>(1, rc.right - rc.left);
+                const S32 height = llmax<S32>(1, rc.bottom - rc.top);
+                const S32 border = 6;
+
+                const bool left = pt.x < border;
+                const bool right = pt.x >= width - border;
+                const bool top = pt.y < border;
+                const bool bottom = pt.y >= height - border;
+
+                if (top && left) return HTTOPLEFT;
+                if (top && right) return HTTOPRIGHT;
+                if (bottom && left) return HTBOTTOMLEFT;
+                if (bottom && right) return HTBOTTOMRIGHT;
+                if (left) return HTLEFT;
+                if (right) return HTRIGHT;
+                if (top) return HTTOP;
+                if (bottom) return HTBOTTOM;
+
+                // Treat the Firestorm header itself as the OS drag region, but
+                // reserve the right side for Firestorm's minimize/close buttons.
+                const S32 logical_height =
+                    llmax<S32>(1, self->mOriginalRect.getHeight());
+                const S32 header_px = llmax<S32>(
+                    20,
+                    ll_round((F32)self->mFloater->getHeaderHeight() *
+                             (F32)height / (F32)logical_height));
+                const S32 button_reserve = llmax<S32>(
+                    64,
+                    ll_round(72.f * (F32)width /
+                             (F32)llmax<S32>(
+                                 1, self->mOriginalRect.getWidth())));
+
+                if (pt.y < header_px && pt.x < width - button_reserve)
+                {
+                    return HTCAPTION;
+                }
+            }
+            return HTCLIENT;
+
+        case WM_GETMINMAXINFO:
+            if (self && self->mFloater)
+            {
+                MINMAXINFO* info =
+                    reinterpret_cast<MINMAXINFO*>(lparam);
+                const LLVector2 ui_scale = LLUI::getScaleFactor();
+                info->ptMinTrackSize.x = llmax<LONG>(
+                    180,
+                    ll_round((F32)self->mFloater->getMinWidth() *
+                             ui_scale.mV[VX]));
+                info->ptMinTrackSize.y = llmax<LONG>(
+                    120,
+                    ll_round((F32)self->mFloater->getMinHeight() *
+                             ui_scale.mV[VY]));
+                return 0;
+            }
+            break;
+
         case WM_CLOSE:
             // Closing the detached OS window reattaches the floater. It must
             // never be forwarded to LLViewerWindow's application-quit path.
