@@ -553,6 +553,11 @@ public:
 
     static class LLMenuHolderGL* sMenuContainer;
 
+    // Resolve the menu holder for the UI root that owns context. Normal
+    // viewer controls use sMenuContainer; detached UI roots can provide their
+    // own LLMenuHolderGL child.
+    static class LLMenuHolderGL* getMenuContainer(const LLView* context = nullptr);
+
     void resetScrollPositionOnShow(bool reset_scroll_pos) { mResetScrollPositionOnShow = reset_scroll_pos; }
     bool isScrollPositionOnShowReset() { return mResetScrollPositionOnShow; }
 
