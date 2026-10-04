@@ -10,6 +10,7 @@
 #include "llview.h"
 #include "llrender.h"
 #include "llglheaders.h"
+#include "llrendertarget.h"
 #include "llui.h"
 #include "llviewerwindow.h"
 #include "llglslshader.h"
@@ -89,7 +90,7 @@ void BSDetachedFloaterHost::attach()
     if (floater && parent)
     {
         parent->addChild(floater);
-        floater->setRect(original_rect);
+        floater->setShape(original_rect);
         parent->sendChildToFront(floater);
     }
 }
@@ -169,12 +170,6 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
     }
 
     mNativeWindow = hwnd;
-    if (!createGLSurface())
-    {
-        DestroyWindow(hwnd);
-        mNativeWindow = nullptr;
-        return false;
-    }
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
@@ -183,7 +178,10 @@ bool BSDetachedFloaterHost::createNativeWindow(const std::string& title)
 
 void BSDetachedFloaterHost::destroyNativeWindow()
 {
-    destroyGLSurface();
+    mRenderTarget.reset();
+    mPixelBuffer.clear();
+    mRenderWidth = 0;
+    mRenderHeight = 0;
 
     if (mNativeWindow)
     {
@@ -194,104 +192,6 @@ void BSDetachedFloaterHost::destroyNativeWindow()
         {
             DestroyWindow(hwnd);
         }
-    }
-}
-
-bool BSDetachedFloaterHost::createGLSurface()
-{
-    HWND hwnd = static_cast<HWND>(mNativeWindow);
-    HDC dc = GetDC(hwnd);
-    if (!dc)
-    {
-        return false;
-    }
-
-    // Match the main viewer pixel format. This lets the detached context share
-    // the viewer's textures/program objects without invoking global GL init.
-    HDC main_dc = wglGetCurrentDC();
-    HGLRC main_rc = wglGetCurrentContext();
-    const int pixel_format = main_dc ? GetPixelFormat(main_dc) : 0;
-    PIXELFORMATDESCRIPTOR pfd = {};
-
-    if (!main_dc || !main_rc || pixel_format == 0 ||
-        !DescribePixelFormat(main_dc, pixel_format, sizeof(pfd), &pfd) ||
-        !SetPixelFormat(dc, pixel_format, &pfd))
-    {
-        ReleaseDC(hwnd, dc);
-        LL_WARNS("DetachedFloaters")
-            << "Unable to match the viewer OpenGL pixel format." << LL_ENDL;
-        return false;
-    }
-
-    HGLRC rc = nullptr;
-
-    // Prefer the same modern profile/version as the viewer. The share context
-    // is supplied at creation time, which is more reliable than creating a
-    // legacy context and calling wglShareLists() afterward.
-    if (wglCreateContextAttribsARB)
-    {
-        GLint major = 3;
-        GLint minor = 0;
-        glGetIntegerv(GL_MAJOR_VERSION, &major);
-        glGetIntegerv(GL_MINOR_VERSION, &minor);
-
-        const int attribs[] =
-        {
-            WGL_CONTEXT_MAJOR_VERSION_ARB, major,
-            WGL_CONTEXT_MINOR_VERSION_ARB, minor,
-            WGL_CONTEXT_PROFILE_MASK_ARB,
-                LLRender::sGLCoreProfile
-                    ? WGL_CONTEXT_CORE_PROFILE_BIT_ARB
-                    : WGL_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
-            0
-        };
-
-        rc = wglCreateContextAttribsARB(dc, main_rc, attribs);
-    }
-
-    // Conservative fallback for older drivers.
-    if (!rc)
-    {
-        rc = wglCreateContext(dc);
-        if (rc && !wglShareLists(main_rc, rc))
-        {
-            wglDeleteContext(rc);
-            rc = nullptr;
-        }
-    }
-
-    if (!rc)
-    {
-        ReleaseDC(hwnd, dc);
-        LL_WARNS("DetachedFloaters")
-            << "Unable to create a shared OpenGL context." << LL_ENDL;
-        return false;
-    }
-
-    mNativeDC = dc;
-    mGLContext = rc;
-    return true;
-}
-
-void BSDetachedFloaterHost::destroyGLSurface()
-{
-    if (mGLContext)
-    {
-        HGLRC rc = static_cast<HGLRC>(mGLContext);
-        if (wglGetCurrentContext() == rc)
-        {
-            wglMakeCurrent(nullptr, nullptr);
-        }
-
-        wglDeleteContext(rc);
-        mGLContext = nullptr;
-    }
-
-    if (mNativeDC && mNativeWindow)
-    {
-        ReleaseDC(static_cast<HWND>(mNativeWindow),
-                  static_cast<HDC>(mNativeDC));
-        mNativeDC = nullptr;
     }
 }
 
@@ -345,24 +245,31 @@ void BSDetachedFloaterHost::dispatchMouseMessage(
     const S32 y = height - 1 - point.y;
     const MASK mask = detachedMask(true);
 
-    const LLRect old_rect = mFloater->getRect();
-    mFloater->reshape(width, height, false);
-    mFloater->setOrigin(0, 0);
+    const LLVector2 ui_scale = LLUI::getScaleFactor();
+    const S32 logical_width =
+        llmax<S32>(1, ll_round((F32)width / ui_scale.mV[VX]));
+    const S32 logical_height =
+        llmax<S32>(1, ll_round((F32)height / ui_scale.mV[VY]));
+
+    mFloater->setShape(LLRect(0, logical_height, logical_width, 0));
+
+    const S32 ui_x = ll_round((F32)x / ui_scale.mV[VX]);
+    const S32 ui_y = ll_round((F32)y / ui_scale.mV[VY]);
 
     switch (message)
     {
         case WM_MOUSEMOVE:
-            mFloater->handleHover(x, y, mask);
+            mFloater->handleHover(ui_x, ui_y, mask);
             break;
 
         case WM_LBUTTONDOWN:
             SetFocus(hwnd);
             SetCapture(hwnd);
-            mFloater->handleMouseDown(x, y, mask);
+            mFloater->handleMouseDown(ui_x, ui_y, mask);
             break;
 
         case WM_LBUTTONUP:
-            mFloater->handleMouseUp(x, y, mask);
+            mFloater->handleMouseUp(ui_x, ui_y, mask);
             if (GetCapture() == hwnd)
             {
                 ReleaseCapture();
@@ -371,26 +278,26 @@ void BSDetachedFloaterHost::dispatchMouseMessage(
 
         case WM_LBUTTONDBLCLK:
             SetFocus(hwnd);
-            mFloater->handleDoubleClick(x, y, mask);
+            mFloater->handleDoubleClick(ui_x, ui_y, mask);
             break;
 
         case WM_RBUTTONDOWN:
             SetFocus(hwnd);
-            mFloater->handleRightMouseDown(x, y, mask);
+            mFloater->handleRightMouseDown(ui_x, ui_y, mask);
             break;
 
         case WM_RBUTTONUP:
-            mFloater->handleRightMouseUp(x, y, mask);
+            mFloater->handleRightMouseUp(ui_x, ui_y, mask);
             break;
 
         case WM_MBUTTONDOWN:
             SetFocus(hwnd);
             SetCapture(hwnd);
-            mFloater->handleMiddleMouseDown(x, y, mask);
+            mFloater->handleMiddleMouseDown(ui_x, ui_y, mask);
             break;
 
         case WM_MBUTTONUP:
-            mFloater->handleMiddleMouseUp(x, y, mask);
+            mFloater->handleMiddleMouseUp(ui_x, ui_y, mask);
             if (GetCapture() == hwnd)
             {
                 ReleaseCapture();
@@ -404,7 +311,7 @@ void BSDetachedFloaterHost::dispatchMouseMessage(
                 WHEEL_DELTA;
             if (clicks)
             {
-                mFloater->handleScrollWheel(x, y, clicks);
+                mFloater->handleScrollWheel(ui_x, ui_y, clicks);
             }
             break;
         }
@@ -416,7 +323,7 @@ void BSDetachedFloaterHost::dispatchMouseMessage(
                 WHEEL_DELTA;
             if (clicks)
             {
-                mFloater->handleScrollHWheel(x, y, clicks);
+                mFloater->handleScrollHWheel(ui_x, ui_y, clicks);
             }
             break;
         }
@@ -425,7 +332,6 @@ void BSDetachedFloaterHost::dispatchMouseMessage(
             break;
     }
 
-    mFloater->setRect(old_rect);
 }
 
 void BSDetachedFloaterHost::dispatchKeyMessage(
@@ -479,74 +385,148 @@ void BSDetachedFloaterHost::dispatchKeyMessage(
     }
 }
 
+void BSDetachedFloaterHost::presentPixels(S32 width, S32 height)
+{
+    if (!mNativeWindow || mPixelBuffer.empty())
+    {
+        return;
+    }
+
+    HWND hwnd = static_cast<HWND>(mNativeWindow);
+    HDC dc = GetDC(hwnd);
+    if (!dc)
+    {
+        return;
+    }
+
+    BITMAPINFO bitmap = {};
+    bitmap.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bitmap.bmiHeader.biWidth = width;
+    // Positive height means a bottom-up DIB, matching glReadPixels().
+    bitmap.bmiHeader.biHeight = height;
+    bitmap.bmiHeader.biPlanes = 1;
+    bitmap.bmiHeader.biBitCount = 32;
+    bitmap.bmiHeader.biCompression = BI_RGB;
+
+    StretchDIBits(
+        dc,
+        0, 0, width, height,
+        0, 0, width, height,
+        mPixelBuffer.data(),
+        &bitmap,
+        DIB_RGB_COLORS,
+        SRCCOPY);
+
+    ReleaseDC(hwnd, dc);
+}
+
 void BSDetachedFloaterHost::draw()
 {
-    // Our HWND belongs to the viewer main thread, so unlike LLWindowWin32 it
-    // does not have a dedicated GetMessage() thread. Pump it once per frame.
-    // This is what prevents Windows from ghosting it as "Not Responding".
+    // This HWND lives on the viewer's main thread, so pump it every frame.
     pumpMessages();
 
-    if (!mFloater || !mNativeWindow || !mNativeDC || !mGLContext ||
+    if (!mFloater || !mNativeWindow ||
         !IsWindowVisible(static_cast<HWND>(mNativeWindow)) ||
         IsIconic(static_cast<HWND>(mNativeWindow)))
     {
         return;
     }
 
-    HDC previous_dc = wglGetCurrentDC();
-    HGLRC previous_rc = wglGetCurrentContext();
-
-    HDC dc = static_cast<HDC>(mNativeDC);
-    HGLRC rc = static_cast<HGLRC>(mGLContext);
-    if (!wglMakeCurrent(dc, rc))
+    RECT client = {};
+    if (!GetClientRect(static_cast<HWND>(mNativeWindow), &client))
     {
         return;
     }
 
-    RECT client = {};
-    GetClientRect(static_cast<HWND>(mNativeWindow), &client);
     const S32 width = llmax<S32>(1, client.right - client.left);
     const S32 height = llmax<S32>(1, client.bottom - client.top);
+    const LLVector2 ui_scale = LLUI::getScaleFactor();
+    const S32 logical_width =
+        llmax<S32>(1, ll_round((F32)width / ui_scale.mV[VX]));
+    const S32 logical_height =
+        llmax<S32>(1, ll_round((F32)height / ui_scale.mV[VY]));
 
-    glViewport(0, 0, width, height);
+    // Keep the detached floater laid out for the native window. Its original
+    // shape is restored by attach().
+    mFloater->setShape(LLRect(0, logical_height, logical_width, 0));
+
+    if (!mRenderTarget)
+    {
+        mRenderTarget = std::make_unique<LLRenderTarget>();
+    }
+
+    if (!mRenderTarget->isComplete())
+    {
+        if (!mRenderTarget->allocate(width, height, GL_RGBA, false))
+        {
+            LL_WARNS("DetachedFloaters")
+                << "Failed to allocate detached UI render target "
+                << width << "x" << height << LL_ENDL;
+            return;
+        }
+        mRenderWidth = width;
+        mRenderHeight = height;
+    }
+    else if (mRenderWidth != width || mRenderHeight != height)
+    {
+        mRenderTarget->resize(width, height);
+        mRenderWidth = width;
+        mRenderHeight = height;
+    }
+
+    mPixelBuffer.resize(
+        static_cast<size_t>(width) * static_cast<size_t>(height) * 4u);
+
+    // Render using the viewer's already-initialized GL context. This is the
+    // key difference from the previous black-window implementation: all
+    // Firestorm VAOs, shaders and cached GL state remain valid.
+    mRenderTarget->bindTarget();
     glClearColor(0.f, 0.f, 0.f, 1.f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    mRenderTarget->clear(GL_COLOR_BUFFER_BIT);
 
     gGL.matrixMode(LLRender::MM_PROJECTION);
     gGL.pushMatrix();
     gGL.loadIdentity();
-    gGL.ortho(0.f, static_cast<F32>(width),
-              0.f, static_cast<F32>(height), -1.f, 1.f);
+    gGL.ortho(0.f, (F32)width, 0.f, (F32)height, -1.f, 1.f);
 
     gGL.matrixMode(LLRender::MM_MODELVIEW);
     gGL.pushMatrix();
     gGL.loadIdentity();
+    gGL.pushUIMatrix();
+    gGL.scaleUI(ui_scale.mV[VX], ui_scale.mV[VY], 1.f);
 
-    const LLRect old_rect = mFloater->getRect();
-    mFloater->reshape(width, height, false);
-    mFloater->setOrigin(0, 0);
+    {
+        LLGLSUIDefault gls_ui;
+        gUIProgram.bind();
+        gGL.color4f(1.f, 1.f, 1.f, 1.f);
 
-    gUIProgram.bind();
-    gGL.color4f(1.f, 1.f, 1.f, 1.f);
+        const bool was_drawing = LLView::sIsDrawing;
+        LLView::sIsDrawing = true;
+        mFloater->draw();
+        LLView::sIsDrawing = was_drawing;
 
-    const bool was_drawing = LLView::sIsDrawing;
-    LLView::sIsDrawing = true;
-    mFloater->draw();
-    LLView::sIsDrawing = was_drawing;
+        gGL.flush();
+        gUIProgram.unbind();
+    }
 
-    gGL.flush();
-    gUIProgram.unbind();
-
-    mFloater->setRect(old_rect);
-
+    gGL.popUIMatrix();
     gGL.matrixMode(LLRender::MM_MODELVIEW);
     gGL.popMatrix();
     gGL.matrixMode(LLRender::MM_PROJECTION);
     gGL.popMatrix();
     gGL.matrixMode(LLRender::MM_MODELVIEW);
 
-    SwapBuffers(dc);
-    wglMakeCurrent(previous_dc, previous_rc);
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glReadPixels(
+        0, 0, width, height,
+        GL_BGRA, GL_UNSIGNED_BYTE,
+        mPixelBuffer.data());
+
+    mRenderTarget->flush();
+
+    // Presentation is deliberately GDI for the MVP. It avoids introducing a
+    // second OpenGL context while we validate detach/reattach and input.
+    presentPixels(width, height);
 }
 
 long long __stdcall BSDetachedFloaterHost::windowProc(
