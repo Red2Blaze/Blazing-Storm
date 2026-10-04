@@ -10,6 +10,7 @@
 #include "llview.h"
 #include "llrender.h"
 #include "llglheaders.h"
+#include "llglstates.h"
 #include "llrendertarget.h"
 #include "llui.h"
 #include "llviewerwindow.h"
@@ -585,7 +586,7 @@ long long __stdcall BSDetachedFloaterHost::windowProc(
             return 0;
 
         case WM_ERASEBKGND:
-            // The GL surface paints the entire client area.
+            // The off-screen UI frame paints the entire client area.
             return 1;
 
         case WM_DESTROY:
