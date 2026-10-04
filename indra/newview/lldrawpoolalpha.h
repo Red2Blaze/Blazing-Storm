@@ -58,13 +58,22 @@ public:
     /*virtual*/ void renderPostDeferred(S32 pass);
     /*virtual*/ S32  getNumPasses() { return 1; }
 
-    void forwardRender(bool write_depth = false);
+    // Experimental three-pass alpha ordering for avatar attachments.
+    // World non-rigged alpha -> rigged alpha -> attached non-rigged alpha.
+    enum AttachmentFilter
+    {
+        ATTACHMENT_ALL = 0,
+        ATTACHMENT_NONE,
+        ATTACHMENT_ONLY
+    };
+
+    void forwardRender(bool rigged = false, AttachmentFilter filter = ATTACHMENT_ALL);
     /*virtual*/ void prerender();
 
     void renderDebugAlpha();
 
     void renderGroupAlpha(LLSpatialGroup* group, U32 type, U32 mask, bool texture = true);
-    void renderAlpha(U32 mask, bool depth_only = false, bool rigged = false);
+    void renderAlpha(U32 mask, bool depth_only = false, bool rigged = false, AttachmentFilter filter = ATTACHMENT_ALL);
     void renderAlphaHighlight();
 
     static bool sShowDebugAlpha;
