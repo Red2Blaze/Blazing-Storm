@@ -425,13 +425,17 @@ void FSFloaterNearbyChat::onChatOptionsContextMenuItemClicked(const LLSD& userda
 {
     if (userdata.asString() == "pop_out_native")
     {
-        if (BSDetachedFloaterHost::instance().isDetached(this))
+        // Nearby Chat normally lives inside the Conversations multi-floater.
+        // Detach that root so Nearby Chat and every IM tab move together.
+        FSFloaterIMContainer* conversations = FSFloaterIMContainer::getInstance();
+        if (BSDetachedFloaterHost::instance().isDetached(conversations))
         {
             BSDetachedFloaterHost::instance().attach();
         }
         else
         {
-            BSDetachedFloaterHost::instance().detach(this, "Blazing Storm - Nearby Chat");
+            BSDetachedFloaterHost::instance().detach(
+                conversations, "Blazing Storm - Conversations");
         }
         return;
     }
