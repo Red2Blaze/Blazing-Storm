@@ -118,6 +118,12 @@ public:
     LLPointer<LLVOAvatar> mAvatar = nullptr;
     LLConstPointer<LLMeshSkinInfo> mSkinInfo;// <FS:Beq/> be defensive about UAF with skinInfo during LocalMesh
 
+    // Wearer/control avatar for an attachment, including non-rigged attachments.
+    // mAvatar above is only populated for rigged draw infos. This remains null
+    // for normal world geometry and lets the alpha pool distinguish world alpha
+    // from static avatar-attached alpha without changing blend/depth behavior.
+    LLPointer<LLVOAvatar> mAttachedToAvatar = nullptr;
+
     // Material pointer here is likely for debugging only and are immaterial (zing!)
     LLPointer<LLMaterial> mMaterial;
 
