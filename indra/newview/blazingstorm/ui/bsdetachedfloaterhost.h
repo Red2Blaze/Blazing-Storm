@@ -27,6 +27,10 @@ public:
     bool isDetached() const { return mFloater != nullptr; }
     bool isDetached(const LLFloater* floater) const { return mFloater == floater; }
 
+    void setAlwaysOnTop(bool enabled);
+    void toggleAlwaysOnTop() { setAlwaysOnTop(!mAlwaysOnTop); }
+    bool isAlwaysOnTop() const { return mAlwaysOnTop; }
+
     // Draw the detached floater after the main viewer frame has completed.
     void draw();
 
@@ -34,6 +38,7 @@ private:
     LLFloater* mFloater = nullptr;
     LLView* mOriginalParent = nullptr;
     LLRect mOriginalRect;
+    bool mAlwaysOnTop = false;
 
 #ifdef LL_WINDOWS
     void* mNativeWindow = nullptr;
