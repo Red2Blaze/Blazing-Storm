@@ -1504,6 +1504,12 @@ void LLMenuItemBranchDownGL::openMenu( void )
         }
         else
         {
+            LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(getMenu());
+            if (holder && branch->getParent() != holder)
+            {
+                branch->updateParent(holder);
+            }
+
             // We're showing the drop-down menu, so patch up its labels/rects
             branch->arrange();
 
@@ -1512,27 +1518,27 @@ void LLMenuItemBranchDownGL::openMenu( void )
             S32 top = getRect().mBottom;
             localPointToOtherView(left, top, &left, &top, branch->getParent());
 
-            rect.setLeftTopAndSize( left, top,
-                                    rect.getWidth(), rect.getHeight() );
-            branch->setRect( rect );
-            S32 x = 0;
-            S32 y = 0;
-            branch->localPointToScreen( 0, 0, &x, &y );
-            S32 delta_x = 0;
+            rect.setLeftTopAndSize(left, top,
+                                   rect.getWidth(), rect.getHeight());
+            branch->setRect(rect);
 
-            LLCoordScreen window_size;
-            LLWindow* windowp = getWindow();
-            windowp->getSize(&window_size);
-
-            S32 window_width = window_size.mX;
-            if( x > window_width - rect.getWidth() )
+            if (holder)
             {
-                delta_x = (window_width - rect.getWidth()) - x;
+                const LLRect region = holder->getMenuRect();
+                S32 delta_x = 0;
+                if (branch->getRect().mRight > region.mRight)
+                {
+                    delta_x = region.mRight - branch->getRect().mRight;
+                }
+                else if (branch->getRect().mLeft < region.mLeft)
+                {
+                    delta_x = region.mLeft - branch->getRect().mLeft;
+                }
+                branch->translate(delta_x, 0);
             }
-            branch->translate( delta_x, 0 );
 
             setHighlight(true);
-            branch->setVisible( true );
+            branch->setVisible(true);
             branch->getParent()->sendChildToFront(branch);
         }
     }
@@ -1584,7 +1590,10 @@ bool LLMenuItemBranchDownGL::handleMouseDown( S32 x, S32 y, MASK mask )
 
     if (getVisible() && isOpen())
     {
-        LLMenuGL::sMenuContainer->hideMenus();
+        if (LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(getMenu()))
+        {
+            holder->hideMenus();
+        }
     }
     else
     {
@@ -2808,7 +2817,7 @@ bool LLMenuGL::appendMenu( LLMenuGL* menu )
 
     // Inherit colors
     menu->setBackgroundColor( mBackgroundColor );
-    menu->updateParent(LLMenuGL::sMenuContainer);
+    menu->updateParent(LLMenuGL::getMenuContainer(this));
     return success;
 }
 
@@ -2831,7 +2840,10 @@ bool LLMenuGL::appendContextSubMenu(LLMenuGL *menu)
     p.highlight_fg_color=LLUIColorTable::instance().getColor("MenuItemHighlightFgColor");
 
     item = LLUICtrlFactory::create<LLContextMenuBranch>(p);
-    LLMenuGL::sMenuContainer->addChild(item->getBranch());
+    if (LLMenuHolderGL* holder = LLMenuGL::getMenuContainer(this))
+    {
+        holder->addChild(item->getBranch());
+    }
 
     return append( item );
 }
