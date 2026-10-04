@@ -8,9 +8,12 @@
 #include "llsingleton.h"
 #include "llrect.h"
 #include <string>
+#include <memory>
+#include <vector>
 
 class LLFloater;
 class LLView;
+class LLRenderTarget;
 
 class BSDetachedFloaterHost final : public LLSingleton<BSDetachedFloaterHost>
 {
@@ -34,11 +37,12 @@ private:
 
 #ifdef LL_WINDOWS
     void* mNativeWindow = nullptr;
-    void* mNativeDC = nullptr;
-    void* mGLContext = nullptr;
-    bool createGLSurface();
-    void destroyGLSurface();
+    std::unique_ptr<LLRenderTarget> mRenderTarget;
+    std::vector<unsigned char> mPixelBuffer;
+    S32 mRenderWidth = 0;
+    S32 mRenderHeight = 0;
     void pumpMessages();
+    void presentPixels(S32 width, S32 height);
     void dispatchMouseMessage(unsigned int message, unsigned long long wparam, long long lparam);
     void dispatchKeyMessage(unsigned int message, unsigned long long wparam, long long lparam);
     static long long __stdcall windowProc(void* hwnd, unsigned int message,
