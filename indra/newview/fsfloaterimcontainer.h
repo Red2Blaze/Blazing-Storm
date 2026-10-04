@@ -37,6 +37,7 @@
 class LLTabContainer;
 class LLButton;
 class LLUICtrl;
+class LLMenuHolderGL;
 
 class FSFloaterIMContainer : public LLMultiFloater, public LLIMSessionObserver
 {
@@ -115,6 +116,7 @@ private:
     eVoiceState mCurrentVoiceState;
     bool        mForceVoiceStateUpdate;
     LLButton*   mAlwaysOnTopButton;
+    LLMenuHolderGL* mDetachedMenuHolder;
 
     typedef std::map<LLUUID, LLFloater*> avatarID_panel_map_t;
     avatarID_panel_map_t mSessions;
