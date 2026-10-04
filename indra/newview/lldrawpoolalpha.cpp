@@ -199,14 +199,35 @@ void LLDrawPoolAlpha::renderPostDeferred(S32 pass)
     // already being setup for rendering
     LLGLSLShader::unbind();
 
-    if (!LLPipeline::sRenderingHUDs)
-    {
-        // first pass, render rigged objects only and render to depth buffer
-        forwardRender(true);
-    }
+    static LLCachedControl<bool> use_three_pass_order(gSavedSettings, "BlazingAlphaThreePassOrder");
 
-    // second pass, regular forward alpha rendering
-    forwardRender();
+    if (use_three_pass_order &&
+        !LLPipeline::sRenderingHUDs &&
+        getType() == LLDrawPool::POOL_ALPHA_POST_WATER)
+    {
+        // Experimental Blazing Storm alpha ordering, adapted from AYAstorm's
+        // attachment-alpha fix:
+        //   1) world/rezzed non-rigged alpha
+        //   2) all rigged alpha (hair/clothing)
+        //   3) avatar-attached non-rigged alpha (prim lashes/accessories)
+        //
+        // This keeps world transparency in front/behind rigged hair from being
+        // lost while ensuring static alpha attachments are not over-blended by
+        // rigged hair drawn after them.
+        forwardRender(false, ATTACHMENT_NONE);
+        forwardRender(true);
+        forwardRender(false, ATTACHMENT_ONLY);
+    }
+    else
+    {
+        // Stock Firestorm ordering. Also retained for PRE_WATER and HUD passes.
+        if (!LLPipeline::sRenderingHUDs)
+        {
+            forwardRender(true);
+        }
+
+        forwardRender();
+    }
 
     // final pass, render to depth for depth of field effects
     if (!LLPipeline::sImpostorRender && LLPipeline::RenderDepthOfField && !gCubeSnapshot && !LLPipeline::sRenderingHUDs && getType() == LLDrawPool::POOL_ALPHA_POST_WATER)
@@ -229,7 +250,7 @@ void LLDrawPoolAlpha::renderPostDeferred(S32 pass)
     }
 }
 
-void LLDrawPoolAlpha::forwardRender(bool rigged)
+void LLDrawPoolAlpha::forwardRender(bool rigged, AttachmentFilter filter)
 {
     gPipeline.enableLightsDynamic();
 
@@ -264,12 +285,18 @@ void LLDrawPoolAlpha::forwardRender(bool rigged)
 
     // If the face is more than 90% transparent, then don't update the Depth buffer for Dof
     // We don't want the nearly invisible objects to cause of DoF effects
-    renderAlpha(getVertexDataMask() | LLVertexBuffer::MAP_TEXTURE_INDEX | LLVertexBuffer::MAP_TANGENT | LLVertexBuffer::MAP_TEXCOORD1 | LLVertexBuffer::MAP_TEXCOORD2, false, rigged);
+    renderAlpha(getVertexDataMask() | LLVertexBuffer::MAP_TEXTURE_INDEX | LLVertexBuffer::MAP_TANGENT | LLVertexBuffer::MAP_TEXCOORD1 | LLVertexBuffer::MAP_TEXCOORD2, false, rigged, filter);
 
     gGL.setColorMask(true, false);
 
-    if (!rigged && (LLPipeline::sRenderingHUDs || getType() == LLDrawPoolAlpha::POOL_ALPHA_POST_WATER))
-    { //render "highlight alpha" on final non-rigged pass for non-HUDs (HUDs only run pre-water alpha pass)
+    const bool final_nonrigged_pass =
+        !rigged &&
+        (LLPipeline::sRenderingHUDs ||
+         (getType() == LLDrawPoolAlpha::POOL_ALPHA_POST_WATER &&
+          (filter == ATTACHMENT_ALL || filter == ATTACHMENT_ONLY)));
+
+    if (final_nonrigged_pass)
+    { // render "highlight alpha" once, after the final non-rigged pass
         // NOTE -- hacky call here protected by !rigged instead of alongside "forwardRender"
         // so renderDebugAlpha is executed while gls_pipeline_alpha and depth GL state
         // variables above are still in scope
@@ -580,7 +607,7 @@ void LLDrawPoolAlpha::renderRiggedPbrEmissives(std::vector<LLDrawInfo*>& emissiv
     }
 }
 
-void LLDrawPoolAlpha::renderAlpha(U32 mask, bool depth_only, bool rigged)
+void LLDrawPoolAlpha::renderAlpha(U32 mask, bool depth_only, bool rigged, AttachmentFilter filter)
 {
     LL_PROFILE_ZONE_SCOPED_CATEGORY_DRAWPOOL;
     bool initialized_lighting = false;
@@ -680,6 +707,21 @@ void LLDrawPoolAlpha::renderAlpha(U32 mask, bool depth_only, bool rigged)
                 if ((bool)params.mAvatar != rigged)
                 {
                     continue;
+                }
+
+                // The filter only splits the non-rigged alpha list. Rigged
+                // geometry already has its own render list.
+                if (!rigged)
+                {
+                    if (filter == ATTACHMENT_NONE && params.mAttachedToAvatar.notNull())
+                    {
+                        continue;
+                    }
+
+                    if (filter == ATTACHMENT_ONLY && params.mAttachedToAvatar.isNull())
+                    {
+                        continue;
+                    }
                 }
 
                 LL_PROFILE_ZONE_NAMED_CATEGORY_DRAWPOOL("ra - push batch");
