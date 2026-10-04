@@ -485,6 +485,9 @@ void BSDetachedFloaterHost::draw()
     if (mFloater->isMinimized())
     {
         mFloater->setMinimized(false);
+        // setMinimized() can touch the floater's own rect; put the detached
+        // root back on its immutable layout rectangle before continuing.
+        mFloater->setRect(mOriginalRect);
         ShowWindow(hwnd, SW_MINIMIZE);
         return;
     }
