@@ -30,11 +30,14 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "fsfloaterimcontainer.h"
+#include "blazingstorm/ui/bsdetachedfloaterhost.h"
 
 #include "fsfloatercontacts.h"
 #include "fsfloaterim.h"
 #include "fsfloaternearbychat.h"
 #include "llfloaterreg.h"
+#include "llbutton.h"
+#include "lluictrlfactory.h"
 #include "llchiclet.h"
 #include "llchicletbar.h"
 #include "llemojihelper.h"
@@ -58,6 +61,7 @@ FSFloaterIMContainer::FSFloaterIMContainer(const LLSD& seed)
     mActiveVoiceFloater(nullptr),
     mCurrentVoiceState(VOICE_STATE_NONE),
     mForceVoiceStateUpdate(false),
+    mAlwaysOnTopButton(nullptr),
     mIsAddingNewSession(false)
 {
     mAutoResize = false;
@@ -91,6 +95,31 @@ bool FSFloaterIMContainer::postBuild()
     mActiveVoiceUpdateTimer.start();
 
     gSavedSettings.getControl("FSShowConversationVoiceStateIndicator")->getSignal()->connect(boost::bind(&FSFloaterIMContainer::onVoiceStateIndicatorChanged, this, _2));
+
+    // Blazing Storm: this button is only visible while Conversations is in a
+    // native detached window. It toggles the HWND's independent TOPMOST state.
+    LLButton::Params top_button;
+    top_button.name("detached_always_on_top");
+    top_button.label("TOP");
+    top_button.label_selected("TOP");
+    top_button.tool_tip("Always on top");
+    top_button.is_toggle(true);
+    top_button.tab_stop(false);
+    top_button.chrome(true);
+    top_button.follows.flags(FOLLOWS_TOP | FOLLOWS_RIGHT);
+    top_button.rect(LLRect(
+        getRect().getWidth() - 75,
+        getRect().getHeight() - 2,
+        getRect().getWidth() - 45,
+        getRect().getHeight() - 20));
+    top_button.click_callback.function(
+        boost::bind(&FSFloaterIMContainer::onAlwaysOnTopClicked,
+                    this, _1, _2));
+
+    mAlwaysOnTopButton = LLUICtrlFactory::create<LLButton>(top_button);
+    addChild(mAlwaysOnTopButton);
+    mAlwaysOnTopButton->setVisible(false);
+    sendChildToFront(mAlwaysOnTopButton);
 
     return true;
 }
@@ -583,9 +612,38 @@ void FSFloaterIMContainer::onVoiceStateIndicatorChanged(const LLSD& data)
     }
 }
 
+void FSFloaterIMContainer::onAlwaysOnTopClicked(LLUICtrl*, const LLSD&)
+{
+    BSDetachedFloaterHost& host = BSDetachedFloaterHost::instance();
+    if (host.isDetached(this))
+    {
+        host.toggleAlwaysOnTop();
+    }
+
+    if (mAlwaysOnTopButton)
+    {
+        mAlwaysOnTopButton->setToggleState(host.isAlwaysOnTop());
+    }
+}
+
 // virtual
 void FSFloaterIMContainer::draw()
 {
+    if (mAlwaysOnTopButton)
+    {
+        const bool detached =
+            BSDetachedFloaterHost::instanceExists() &&
+            BSDetachedFloaterHost::instance().isDetached(this);
+
+        mAlwaysOnTopButton->setVisible(detached);
+        if (detached)
+        {
+            mAlwaysOnTopButton->setToggleState(
+                BSDetachedFloaterHost::instance().isAlwaysOnTop());
+            sendChildToFront(mAlwaysOnTopButton);
+        }
+    }
+
     static LLCachedControl<bool> fsShowConversationVoiceStateIndicator(gSavedSettings, "FSShowConversationVoiceStateIndicator");
     if (fsShowConversationVoiceStateIndicator && (mActiveVoiceUpdateTimer.hasExpired() || mForceVoiceStateUpdate))
     {
