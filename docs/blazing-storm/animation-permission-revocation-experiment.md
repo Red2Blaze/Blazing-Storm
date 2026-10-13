@@ -60,7 +60,7 @@ Do not try to forge another user's agent/session IDs or rely on undocumented ser
 
 ## Build and validation
 
-1. Check out `experiment/animation-permission-revocation` and run your normal Windows ReleaseFS_open build.
+1. Check out `experiment/animation-permission-revocation` and run your normal Windows ReleaseFS_open build, or use the branch-specific **Build Animation Permission Revoke Experiment** GitHub Actions workflow (`.github/workflows/animation-revocation-experiment.yml`). Its output is a **Windows x64 experimental artifact**, with a SHA256 file, retained for 14 days. This workflow does not publish or replace the production `latest-test` release.
 2. Verify `llviewermenu.cpp` compiles and both menu entries open the intended dialogs.
 3. Verify Cancel, malformed UUID, and region-change paths do not dispatch a request.
 4. Confirm a valid Region request uses the current region UUID, and an Object request uses precisely the entered UUID.
