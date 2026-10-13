@@ -131,6 +131,7 @@
 #include "llviewermessage.h"
 #include "llviewernetwork.h"
 #include "llviewerobjectlist.h"
+#include "llviewerregion.h" // <BlazingStorm> Experimental animation permission test
 #include "llviewerparcelmgr.h"
 #include "llviewerstats.h"
 #include "llviewerstatsrecorder.h"
