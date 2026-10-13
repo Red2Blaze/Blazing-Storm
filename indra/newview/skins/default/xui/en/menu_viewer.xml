@@ -509,6 +509,27 @@
                  function="Tools.StopAllAnimations"
                  parameter="stoprevoke"/>
             </menu_item_call>
+            <!-- <BlazingStorm> Simulator-side permission revocation research.
+                 Do not present a sent request as a confirmed server-side revoke. -->
+            <menu
+             label="Animation Permission Tests (Experimental)"
+             name="Blazing Animation Permission Tests">
+                <menu_item_call
+                 label="Request Revoke: Current Region"
+                 name="Blazing Revoke Animation Region">
+                    <menu_item_call.on_click
+                     function="Tools.BlazingTestRevokeAnimations"
+                     parameter="region"/>
+                </menu_item_call>
+                <menu_item_call
+                 label="Request Revoke: Object UUID..."
+                 name="Blazing Revoke Animation Object">
+                    <menu_item_call.on_click
+                     function="Tools.BlazingTestRevokeAnimations"
+                     parameter="object"/>
+                </menu_item_call>
+            </menu>
+            <!-- </BlazingStorm> -->
             <menu_item_call
                 label="Undeform Avatar"
                 name="undeform_avatar">

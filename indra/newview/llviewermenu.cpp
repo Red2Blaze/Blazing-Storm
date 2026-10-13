@@ -7366,6 +7366,113 @@ class LLToolsStopAllAnimations : public view_listener_t
     }
 };
 
+// <BlazingStorm: Experimental server-side animation permission revocation>
+// Tests the existing RevokePermissions simulator message independently of stopping
+// animations. This is a REQUEST only; the protocol has no success acknowledgment.
+// The simulator is authoritative, and permissions held by third-party attachments
+// may remain granted even when the request is delivered.
+namespace
+{
+    constexpr U32 BLAZING_ANIMATION_PERMISSION_BITS = 0x10u | 0x8000u; // trigger | override
+
+    void blazingRevokeNotifyNoRegion()
+    {
+        LLNotificationsUtil::add("BlazingAnimationRevokeNoRegion");
+    }
+
+    bool blazingRevokeRegionStillValid(const LLSD& notification)
+    {
+        LLViewerRegion* region = gAgent.getRegion();
+        return region && region->getRegionID() == notification["payload"]["region_id"].asUUID();
+    }
+
+    void blazingSendAnimationRevokeRequest(const LLUUID& target, const std::string& scope)
+    {
+        gAgent.sendRevokePermissions(target, BLAZING_ANIMATION_PERMISSION_BITS);
+        LL_INFOS("BlazingAnimRevoke") << "Sent RevokePermissions request for "
+            << scope << ", target " << target
+            << ", bits " << BLAZING_ANIMATION_PERMISSION_BITS
+            << ". No simulator acknowledgment is available." << LL_ENDL;
+        LLSD args;
+        args["SCOPE"] = scope;
+        args["TARGET"] = target.asString();
+        LLNotificationsUtil::add("BlazingAnimationRevokeSent", args);
+    }
+
+    bool blazingRevokeRegionConfirmed(const LLSD& notification, const LLSD& response)
+    {
+        if (LLNotificationsUtil::getSelectedOption(notification, response) != 0)
+        {
+            return false;
+        }
+        if (!blazingRevokeRegionStillValid(notification))
+        {
+            blazingRevokeNotifyNoRegion();
+            return false;
+        }
+        blazingSendAnimationRevokeRequest(notification["payload"]["region_id"].asUUID(), "region");
+        return false;
+    }
+
+    bool blazingRevokeObjectConfirmed(const LLSD& notification, const LLSD& response)
+    {
+        if (LLNotificationsUtil::getSelectedOption(notification, response) != 0)
+        {
+            return false;
+        }
+        if (!blazingRevokeRegionStillValid(notification))
+        {
+            blazingRevokeNotifyNoRegion();
+            return false;
+        }
+
+        const std::string object_id = response["object_uuid"].asString();
+        if (!LLUUID::validate(object_id))
+        {
+            LLNotificationsUtil::add("BlazingAnimationRevokeInvalidID");
+            return false;
+        }
+        const LLUUID target(object_id);
+        if (target.isNull())
+        {
+            LLNotificationsUtil::add("BlazingAnimationRevokeInvalidID");
+            return false;
+        }
+        blazingSendAnimationRevokeRequest(target, "object");
+        return false;
+    }
+}
+
+class LLToolsBlazingTestRevokeAnimations : public view_listener_t
+{
+    bool handleEvent(const LLSD& userdata) override
+    {
+        LLViewerRegion* region = gAgent.getRegion();
+        if (!region)
+        {
+            blazingRevokeNotifyNoRegion();
+            return true;
+        }
+
+        LLSD payload;
+        payload["region_id"] = region->getRegionID();
+
+        const std::string scope = userdata.asString();
+        if (scope == "region")
+        {
+            LLNotificationsUtil::add("BlazingAnimationRevokeRegionConfirm",
+                LLSD(), payload, blazingRevokeRegionConfirmed);
+        }
+        else if (scope == "object")
+        {
+            LLNotificationsUtil::add("BlazingAnimationRevokeObjectPrompt",
+                LLSD(), payload, blazingRevokeObjectConfirmed);
+        }
+        return true;
+    }
+};
+// </BlazingStorm: Experimental server-side animation permission revocation>
+
 class LLToolsReleaseKeys : public view_listener_t
 {
     bool handleEvent(const LLSD& userdata)
@@ -12996,6 +13103,7 @@ void initialize_menus()
     commit.add("Tools.Link", boost::bind(&handle_link_objects));
     commit.add("Tools.Unlink", boost::bind(&LLSelectMgr::unlinkObjects, LLSelectMgr::getInstance()));
     view_listener_t::addMenu(new LLToolsStopAllAnimations(), "Tools.StopAllAnimations");
+    view_listener_t::addMenu(new LLToolsBlazingTestRevokeAnimations(), "Tools.BlazingTestRevokeAnimations");
     view_listener_t::addMenu(new LLToolsReleaseKeys(), "Tools.ReleaseKeys");
     view_listener_t::addMenu(new LLToolsEnableReleaseKeys(), "Tools.EnableReleaseKeys");
     commit.add("Tools.LookAtSelection", boost::bind(&handle_look_at_selection, _2));

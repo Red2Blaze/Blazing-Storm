@@ -15589,4 +15589,66 @@ Folder names cannot contain / or \.
   </notification>
   <!-- </FS:Amy> Favorite Wearables folders -->
 
+  <!-- <BlazingStorm> Explicit testing of the existing simulator RevokePermissions message. -->
+  <notification
+   icon="alertmodal.tga"
+   name="BlazingAnimationRevokeRegionConfirm"
+   type="alertmodal">
+This experimental test asks the current simulator to revoke animation-trigger and animation-override permissions held by scripts for YOUR avatar in the current region.
+
+It does not stop animations already playing, may disrupt scripted seating, and cannot guarantee revocation for attachments worn by another resident. Use only in a controlled test.
+
+Send the request?
+    <tag>confirm</tag>
+    <form name="form">
+      <button default="true" index="0" name="Send" text="Send Request"/>
+      <button index="1" name="Cancel" text="Cancel"/>
+    </form>
+  </notification>
+
+  <notification
+   icon="alertmodal.tga"
+   name="BlazingAnimationRevokeObjectPrompt"
+   type="alertmodal">
+Enter the UUID of an object in the CURRENT region, including an object worn as an attachment, to test the simulator's object-targeted RevokePermissions handling.
+
+This requests revocation of only YOUR avatar's animation permissions on that object's scripts. The simulator may reject or ignore the request. It does not stop current animations or change the object.
+    <tag>confirm</tag>
+    <form name="form">
+      <input name="object_uuid" type="text"></input>
+      <button default="true" index="0" name="Send" text="Send Request"/>
+      <button index="1" name="Cancel" text="Cancel"/>
+    </form>
+  </notification>
+
+  <notification
+   icon="alertmodal.tga"
+   name="BlazingAnimationRevokeNoRegion"
+   type="alertmodal">
+No matching active region is available, or you changed regions after opening the test. No request was sent. Please open the test again when connected to the target region.
+    <usetemplate name="okbutton" yestext="OK"/>
+  </notification>
+
+  <notification
+   icon="alertmodal.tga"
+   name="BlazingAnimationRevokeInvalidID"
+   type="alertmodal">
+Enter a valid, non-empty object UUID. No request was sent.
+    <usetemplate name="okbutton" yestext="OK"/>
+  </notification>
+
+  <notification
+   icon="alertmodal.tga"
+   name="BlazingAnimationRevokeSent"
+   type="alertmodal">
+RevokePermissions request sent to the simulator.
+
+Scope: [SCOPE]
+Target: [TARGET]
+
+IMPORTANT: Sent does not mean revoked. The message has no success confirmation, and server-side script permissions may still be active. Verify with a consent-based test and consult the viewer log (BlazingAnimRevoke).
+    <usetemplate name="okbutton" yestext="OK"/>
+  </notification>
+  <!-- </BlazingStorm> -->
+
 </notifications>
