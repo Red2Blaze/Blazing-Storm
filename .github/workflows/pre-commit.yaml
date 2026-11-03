@@ -6,13 +6,19 @@ on:
     branches: [main, contribute]
     tags: [v*]
 
-
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Required for comparing the PR's base and head refs.
+          fetch-depth: 0
       - uses: actions/setup-python@v7
         with:
-          python-version: 3.x
+          python-version: "3.11"
       - uses: pre-commit/action@v3.0.1
+        with:
+          # The inherited upstream repo has unrelated pre-existing hook
+          # violations. Keep PR checks focused on files the PR changes.
+          extra_args: ${{ github.event_name == 'pull_request' && format('--from-ref {0} --to-ref {1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || '--all-files' }}
