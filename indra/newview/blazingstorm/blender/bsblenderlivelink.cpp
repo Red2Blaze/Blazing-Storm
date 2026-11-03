@@ -56,7 +56,7 @@ bool sequence_from_json(const json::value& v, std::uint64_t& value)
     return false;
 }
 
-bool parse_pose(const json::value& payload,
+bool parse_pose(const json::value& payload, const json::value* pelvis_payload,
     std::unordered_map<std::string, LLQuaternion>& rotations,
     bool& has_pelvis, LLVector3& pelvis)
 {
@@ -81,7 +81,7 @@ bool parse_pose(const json::value& payload,
         rotations.emplace(name, LLQuaternion(values[1], values[2], values[3], values[0]));
     }
     has_pelvis = false;
-    if (const auto* v = payload.as_object().if_contains("pelvis"))
+    if (const auto* v = pelvis_payload)
     {
         const auto* p = v->if_array();
         if (!p || p->size() != 3) return false;
@@ -205,7 +205,7 @@ struct BlenderLiveLink::Impl
         std::unordered_map<std::string, LLQuaternion> incoming;
         bool incoming_pelvis_enabled = false;
         LLVector3 incoming_pelvis;
-        if (!parse_pose(*pose, incoming, incoming_pelvis_enabled, incoming_pelvis)) return;
+        if (!parse_pose(*pose, obj->if_contains("pelvis"), incoming, incoming_pelvis_enabled, incoming_pelvis)) return;
         // Prevent stale UDP packets from rolling the avatar backwards.
         if (active && session == incoming_session && incoming_seq <= sequence) return;
         if (active && session != incoming_session) restore(avatar);
