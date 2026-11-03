@@ -3,7 +3,7 @@ import pathlib
 import sys
 import unittest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'blender_addon' / 'blazing_live_link'))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / 'blazing_live_link'))
 from protocol import build_packet, parse_ack, PROTOCOL, VERSION, MAX_BYTES
 
 
