@@ -1,4 +1,10 @@
 /**
+ * $LicenseInfo:firstyear=2026&license=viewerlgpl$
+ * Copyright (C) 2026 Blazing Storm contributors
+ * $/LicenseInfo$
+ */
+
+/**
  * Blazing Storm local-only Blender pose preview.
  * LGPL-2.1-or-later. No outbound grid messages and no external listener.
  */
