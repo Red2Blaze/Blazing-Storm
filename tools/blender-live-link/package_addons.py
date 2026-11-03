@@ -1,3 +1,7 @@
+# $LicenseInfo:firstyear=2026&license=viewerlgpl$
+# Copyright (C) 2026 Blazing Storm contributors
+# $/LicenseInfo$
+
 """Package Blender 5.2 and Blender 3.6 versions from the same source.
 
 Usage: python tools/blender-live-link/package_addons.py
