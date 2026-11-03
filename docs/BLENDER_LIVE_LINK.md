@@ -14,6 +14,14 @@ a separate Blender 3.6 installable add-on is built from the same Python source.
 
 The 3.6 add-on zip is `blazing_live_link_blender_3_6.zip`. It uses the same wire protocol and receiver, so a different viewer build is not needed.
 
+Both installers can be generated from one source tree with:
+
+```bash
+python tools/blender-live-link/package_addons.py
+```
+
+This creates `tools/blender-live-link/dist/blazing_live_link_blender_5_2.zip` and `blazing_live_link_blender_3_6.zip`. The script adjusts the add-on's minimum Blender version for each build; the viewer protocol remains identical. These are classic Python add-on ZIPs, not new-style Blender Extensions manifests.
+
 ### Development mode and limitations
 
 - **Experimental / not visually validated.** The Blender add-on samples evaluated Avastar `m*` deform joints, including IK constraint results, and computes rotations relative to their bind/rest transforms. Bone-axis mapping from Blender's rig to the Second Life avatar skeleton **must be checked in a running viewer**. An X/Y/Z movement may need calibration before the feature is usable for production.
