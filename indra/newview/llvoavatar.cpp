@@ -27,6 +27,7 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "llvoavatar.h"
+#include "blazingstorm/blender/bsblenderlivelink.h"
 
 #include <stdio.h>
 #include <ctype.h>
@@ -3270,6 +3271,11 @@ void LLVOAvatar::idleUpdate(LLAgent &agent, const F64 &time)
     // store off last frame's root position to be consistent with camera position
     mLastRootPos = mRoot->getWorldPosition();
     bool detailed_update = updateCharacter(agent);
+    // Local-only Blender preview, applied after the normal motion update.
+    if (isSelf())
+    {
+        BlazingStorm::BlenderLiveLink::instance().apply(this);
+    }
 
     static LLUICachedControl<bool> visualizers_in_calls("ShowVoiceVisualizersInCalls", false);
     bool voice_enabled = (visualizers_in_calls || LLVoiceClient::getInstance()->inProximalChannel()) &&
