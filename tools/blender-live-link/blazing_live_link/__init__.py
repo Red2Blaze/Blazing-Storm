@@ -1,3 +1,7 @@
+# $LicenseInfo:firstyear=2026&license=viewerlgpl$
+# Copyright (C) 2026 Blazing Storm contributors
+# $/LicenseInfo$
+
 """Blazing Storm Live Link: real-time Avastar/SL deform-bone preview.
 
 Blender 5.2-first, with a compatible Blender 3.6 build from the same source.
