@@ -1,3 +1,7 @@
+# $LicenseInfo:firstyear=2026&license=viewerlgpl$
+# Copyright (C) 2026 Blazing Storm contributors
+# $/LicenseInfo$
+
 """Blazing Storm Blender Live Link v1 wire format. No bpy dependency.
 
 Only transforms on the local computer are sent. Nothing here interacts with SL.
