@@ -1,3 +1,7 @@
+# $LicenseInfo:firstyear=2026&license=viewerlgpl$
+# Copyright (C) 2026 Blazing Storm contributors
+# $/LicenseInfo$
+
 import json
 import pathlib
 import sys
