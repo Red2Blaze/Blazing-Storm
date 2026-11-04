@@ -87,6 +87,7 @@ endif ()
 
 set(viewer_SOURCE_FILES
 # <Add FS includes below this line>
+    blazingstorm/blender/bsblenderlivelink.cpp
     blazingstorm/remote/bsremotesession.cpp
     blazingstorm/remote/bsremoteactions.cpp
     blazingstorm/remote/bsdebugcommands.cpp
@@ -968,6 +969,7 @@ set(viewer_HEADER_FILES
     ViewerInstall.cmake
 
 # <Add FS includes below this line>
+    blazingstorm/blender/bsblenderlivelink.h
     blazingstorm/remote/bsremotesession.h
     blazingstorm/remote/bsremoteactions.h
     blazingstorm/remote/bsdebugcommands.h

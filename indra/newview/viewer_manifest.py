@@ -534,24 +534,29 @@ class ViewerManifest(LLManifest,FSViewerManifest):
 
         return os.path.relpath(abspath(path), abspath(base))
 
-    # <FS:Ansariel> Undo Github-Build stuff - I don't think we need this
-    #def set_github_output_path(self, variable, path):
-    #    self.set_github_output(variable,
-    #                           os.path.normpath(os.path.join(self.get_dst_prefix(), path)))
+    def set_github_output(self, variable, *values):
+        """Publish package metadata for the GitHub Actions signing job.
 
-    #def set_github_output(self, variable, *values):
-    #    GITHUB_OUTPUT = os.getenv('GITHUB_OUTPUT')
-    #    if GITHUB_OUTPUT and values:
-    #        with open(GITHUB_OUTPUT, 'a') as outf:
-    #            if len(values) == 1:
-    #                print('='.join((variable, values[0])), file=outf)
-    #            else:
-    #                delim = secrets.token_hex(8)
-    #                print('<<'.join((variable, delim)), file=outf)
-    #                for value in values:
-    #                    print(value, file=outf)
-    #                print(delim, file=outf)
-    # </FS:Ansariel>
+        Velopack packaging runs in a subprocess, but GITHUB_OUTPUT is inherited
+        from the parent build step. Use the same output file to publish values
+        consumed by the Windows and macOS sign-and-package jobs.
+        """
+        output_file = os.getenv('GITHUB_OUTPUT')
+        if not output_file:
+            if os.getenv('GITHUB_ACTIONS'):
+                raise ManifestError("GITHUB_OUTPUT is required for CI packaging")
+            return
+        if not values:
+            return
+        with open(output_file, 'a', encoding='utf-8') as outf:
+            if len(values) == 1 and '\n' not in str(values[0]) and '\r' not in str(values[0]):
+                print(f"{variable}={values[0]}", file=outf)
+            else:
+                delimiter = secrets.token_hex(16)
+                print(f"{variable}<<{delimiter}", file=outf)
+                for value in values:
+                    print(value, file=outf)
+                print(delimiter, file=outf)
 
 class Windows_x86_64_Manifest(ViewerManifest):
     # We want the platform, per se, for every Windows build to be 'win'. The
