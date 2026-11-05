@@ -1,7 +1,7 @@
 # Blazing Storm — Blender Live Link (experimental v0.2)
 
 Local-only pose preview bridge. Intended for **Blender 5.2 + Avastar** first;
-a separate Blender 3.6 installable add-on is built from the same Python source.
+the installable Blender 5.2/3.6 add-ons are maintained in a separate repository.
 
 ## Installation
 
@@ -14,13 +14,9 @@ a separate Blender 3.6 installable add-on is built from the same Python source.
 
 The 3.6 add-on zip is `blazing_live_link_blender_3_6.zip`. It uses the same wire protocol and receiver, so a different viewer build is not needed.
 
-Both installers can be generated from one source tree with:
+The Blender add-on is maintained separately in **[SL-Blender_LiveLink](https://github.com/Red2Blaze/SL-Blender_LiveLink)**. Download a verified `blazing_live_link_blender_5_2.zip` or `blazing_live_link_blender_3_6.zip` from its **Releases** page. New add-on versions are packaged by its own GitHub Actions workflow. The viewer repository contains only the receiver/menus and viewer-specific regression tests.
 
-```bash
-python tools/blender-live-link/package_addons.py
-```
-
-This creates `tools/blender-live-link/dist/blazing_live_link_blender_5_2.zip` and `blazing_live_link_blender_3_6.zip`. The script adjusts the add-on's minimum Blender version for each build; the viewer protocol remains identical. These are classic Python add-on ZIPs, not new-style Blender Extensions manifests.
+**If Blender reports `cannot import name 'parse_snapshot'`:** close Blender, remove the old `blazing_live_link` add-on folder, and reinstall the full ZIP from the standalone repository. This means Blender still has an older `protocol.py` beside its updated add-on entry point.
 
 ### Selective animation preview (v0.2)
 

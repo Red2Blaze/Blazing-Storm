@@ -1,23 +1,21 @@
-name: Blender Live Link protocol
+name: Viewer Live Link regression
 
 on:
   pull_request:
     paths:
-      - "tools/blender-live-link/**"
+      - "tools/blender-live-link/tests/test_manifest_outputs.py"
+      - "indra/newview/viewer_manifest.py"
+      - "indra/newview/blazingstorm/blender/**"
       - ".github/workflows/blender-live-link-tests.yaml"
   workflow_dispatch:
 
 jobs:
-  protocol:
+  manifest:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - name: Compile add-on Python files
-        run: python -m compileall -q tools/blender-live-link/blazing_live_link
-      - name: Run wire protocol tests
-        run: python -m unittest discover -s tools/blender-live-link/tests -p "test_*.py" -v
-      - name: Package Blender 5.2 and 3.6 add-ons
-        run: python tools/blender-live-link/package_addons.py
+      - name: Test viewer manifest GitHub output integration
+        run: python -m unittest discover -s tools/blender-live-link/tests -p "test_manifest_outputs.py" -v
