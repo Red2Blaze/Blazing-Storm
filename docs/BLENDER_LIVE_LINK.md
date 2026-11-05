@@ -5,7 +5,7 @@ a separate Blender 3.6 installable add-on is built from the same Python source.
 
 ## Installation
 
-1. Check out the `feature/blender-live-link` branch of `Red2Blaze/Blazing-Storm` and rebuild the viewer with its existing Windows build setup.
+1. Check out the `feature/blender-live-link-v02` branch of `Red2Blaze/Blazing-Storm` and rebuild the viewer with its existing Windows build setup.
 2. Open the rebuilt viewer, log in, then use **World > Blazing Storm > Enable Blender Live Link**. The underlying `BSBlenderLiveLinkEnabled` Debug Setting remains available and defaults to **off**.
 3. In Blender 5.2, use `Edit > Preferences > Get Extensions/Add-ons > Install from Disk` (the exact label depends on Blender install) and select `blazing_live_link_blender_5_2.zip`; enable the add-on.
 4. Open an Avastar character with a deform rig. In the 3D View's `N` sidebar, go to **Blazing > Blazing Storm Live Link**, choose the **armature** (containing `mPelvis`, `mHead`, etc.). Choose **Keyframed + selected** and **Avastar (-Y to SL +X)** to start, then press **Start Live Link**.
@@ -62,8 +62,8 @@ Capture is *not* a continuous bidirectional link, and it is not a viewer-side an
 ### Build this feature branch
 
 ```bash
-git fetch origin feature/blender-live-link
-git switch feature/blender-live-link
+git fetch origin feature/blender-live-link-v02
+git switch feature/blender-live-link-v02
 ```
 
 Run the viewer's normal Windows CMake/autobuild configuration and build. A full viewer build and actual Blender/Avastar integration are not yet validated.
@@ -92,4 +92,4 @@ Quaternions use `[w,x,y,z]`; viewer converts to `LLQuaternion(x,y,z,w)`. The sen
 
 ## Repository workflow
 
-This feature is developed on `feature/blender-live-link` using the `Red2Blaze` GitHub account. Org Organizer account separation does not apply to this viewer project.
+This feature is developed on `feature/blender-live-link-v02` using the `Red2Blaze` GitHub account. Org Organizer account separation does not apply to this viewer project.
