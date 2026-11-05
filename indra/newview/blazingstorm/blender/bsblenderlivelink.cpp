@@ -63,7 +63,9 @@ bool sequence_from_json(const json::value& v, std::uint64_t& value)
 }
 
 bool parse_pose(const json::value& payload, const json::value* pelvis_payload,
+    const json::value* positions_payload,
     std::unordered_map<std::string, LLQuaternion>& rotations,
+    std::unordered_map<std::string, LLVector3>& positions,
     bool& has_pelvis, LLVector3& pelvis)
 {
     auto* object = payload.if_object();
@@ -85,6 +87,26 @@ bool parse_pose(const json::value& payload, const json::value* pelvis_payload,
             + double(values[3]) * values[3];
         if (length_sq < 0.000001 || length_sq > 4.0) return false;
         rotations.emplace(name, LLQuaternion(values[1], values[2], values[3], values[0]));
+    }
+    positions.clear();
+    if (positions_payload)
+    {
+        const auto* object = positions_payload->if_object();
+        if (!object || object->size() > MAX_JOINTS) return false;
+        for (const auto& entry : *object)
+        {
+            const std::string name(entry.key().data(), entry.key().size());
+            if (name.size() < 2 || name.size() > 80 || name[0] != 'm') return false;
+            const auto* v = entry.value().if_array();
+            if (!v || v->size() != 3) return false;
+            float p[3];
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (!extract_number((*v)[axis], p[axis]) || std::abs(p[axis]) > 5.f)
+                    return false;
+            }
+            positions.emplace(name, LLVector3(p[0], p[1], p[2]));
+        }
     }
     has_pelvis = false;
     if (const auto* v = pelvis_payload)
@@ -117,6 +139,10 @@ struct BlenderLiveLink::Impl
     Clock::time_point last_packet{};
     std::unordered_map<std::string, LLQuaternion> rotations;
     std::unordered_map<std::string, LLQuaternion> previous_rotations;
+    // New per-bone translations are offsets relative to the original local
+    // joint positions, never absolute coordinates from another skeleton.
+    std::unordered_map<std::string, LLVector3> positions;
+    std::unordered_map<std::string, LLVector3> previous_positions;
     LLVector3 pelvis;
     LLVector3 previous_pelvis;
     bool previous_pelvis_valid = false;
@@ -149,6 +175,15 @@ struct BlenderLiveLink::Impl
                 joint->setRotation(entry.second);
             }
         }
+        for (const auto& entry : previous_positions)
+        {
+            if (LLJoint* joint = avatar->getJoint(entry.first))
+            {
+                joint->setPosition(entry.second);
+            }
+        }
+        previous_positions.clear();
+        positions.clear();
         if (previous_pelvis_valid)
         {
             if (LLJoint* joint = avatar->getJoint("mPelvis"))
@@ -171,6 +206,41 @@ struct BlenderLiveLink::Impl
            "\"type\":\"ack\",\"session\":\"" + session + "\"}";
         boost::system::error_code ignored;
         socket->send_to(asio::buffer(ack), peer, 0, ignored);
+    }
+
+    void reply_snapshot(const udp::endpoint& peer, LLVOAvatar* avatar,
+                        const std::string& requested_session)
+    {
+        json::object message;
+        message["protocol"] = PROTOCOL;
+        message["version"] = 1;
+        message["type"] = "pose_snapshot";
+        message["session"] = requested_session;
+        json::object joints;
+        json::object offsets;
+        for (S32 i = 0; i < static_cast<S32>(MAX_JOINTS); ++i)
+        {
+            LLJoint* joint = avatar->getCharacterJoint(i);
+            if (!joint) break;
+            const std::string& name = joint->getName();
+            if (name.size() < 2 || name[0] != 'm') continue;
+            const LLQuaternion rotation = joint->getRotation();
+            joints[name] = json::array{double(rotation.mQ[VW]),
+                double(rotation.mQ[VX]), double(rotation.mQ[VY]),
+                double(rotation.mQ[VZ])};
+            const LLVector3 offset = joint->getPosition() - joint->getDefaultPosition();
+            if (offset.lengthSquared() > 0.000001f)
+            {
+                offsets[name] = json::array{double(offset.mV[VX]),
+                    double(offset.mV[VY]), double(offset.mV[VZ])};
+            }
+        }
+        message["joints"] = std::move(joints);
+        message["positions"] = std::move(offsets);
+        const std::string wire = json::serialize(message);
+        if (wire.size() > MAX_PACKET_BYTES) return;
+        boost::system::error_code ignored;
+        socket->send_to(asio::buffer(wire), peer, 0, ignored);
     }
 
     void ingest(const char* buffer, std::size_t count, const udp::endpoint& peer,
@@ -199,6 +269,13 @@ struct BlenderLiveLink::Impl
         }
         std::uint64_t incoming_seq = 0;
         if (!sequence_from_json(*seq, incoming_seq)) return;
+        if (type->as_string() == "snapshot_request")
+        {
+            // Capture only while the live preview is stopped, avoiding an
+            // accidental round trip of the viewer's own streamed transforms.
+            if (!active) reply_snapshot(peer, avatar, incoming_session);
+            return;
+        }
         if (type->as_string() == "stop")
         {
             if (active && incoming_session == session && incoming_seq >= sequence)
@@ -209,9 +286,11 @@ struct BlenderLiveLink::Impl
         const auto* pose = obj->if_contains("joints");
         if (!pose) return;
         std::unordered_map<std::string, LLQuaternion> incoming;
+        std::unordered_map<std::string, LLVector3> incoming_positions;
         bool incoming_pelvis_enabled = false;
         LLVector3 incoming_pelvis;
-        if (!parse_pose(*pose, obj->if_contains("pelvis"), incoming, incoming_pelvis_enabled, incoming_pelvis)) return;
+        if (!parse_pose(*pose, obj->if_contains("pelvis"), obj->if_contains("positions"),
+            incoming, incoming_positions, incoming_pelvis_enabled, incoming_pelvis)) return;
         // Prevent stale UDP packets from rolling the avatar backwards.
         if (active && session == incoming_session && incoming_seq <= sequence) return;
         if (active && session != incoming_session) restore(avatar);
@@ -225,12 +304,24 @@ struct BlenderLiveLink::Impl
             }
             else ++it;
         }
+        // Unpose joints that are no longer translated by the new selection.
+        for (auto it = previous_positions.begin(); it != previous_positions.end();)
+        {
+            if (incoming_positions.find(it->first) == incoming_positions.end())
+            {
+                if (LLJoint* joint = avatar->getJoint(it->first))
+                    joint->setPosition(it->second);
+                it = previous_positions.erase(it);
+            }
+            else ++it;
+        }
         if (previous_pelvis_valid && !incoming_pelvis_enabled)
         {
             if (LLJoint* joint = avatar->getJoint("mPelvis")) joint->setPosition(previous_pelvis);
             previous_pelvis_valid = false;
         }
         rotations = std::move(incoming);
+        positions = std::move(incoming_positions);
         has_pelvis = incoming_pelvis_enabled;
         pelvis = incoming_pelvis;
         session = incoming_session;
@@ -296,7 +387,20 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
         }
         joint->setRotation(entry.second);
     }
-    if (link.has_pelvis)
+    for (const auto& entry : link.positions)
+    {
+        if (LLJoint* joint = avatar->getJoint(entry.first))
+        {
+            auto found = link.previous_positions.find(entry.first);
+            if (found == link.previous_positions.end())
+            {
+                found = link.previous_positions.emplace(entry.first, joint->getPosition()).first;
+            }
+            joint->setPosition(found->second + entry.second);
+        }
+    }
+    // Legacy clients may still send an absolute pelvis value.
+    if (link.has_pelvis && link.positions.find("mPelvis") == link.positions.end())
     {
         if (LLJoint* joint = avatar->getJoint("mPelvis"))
         {
