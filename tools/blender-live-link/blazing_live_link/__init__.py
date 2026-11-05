@@ -71,6 +71,9 @@ class BSLLSettings(PropertyGroup):
     capture_selected_only: BoolProperty(
         name="Capture selected bones only", default=True,
         description="Import keyframes from the viewer only on selected deform bones")
+    capture_positions: BoolProperty(
+        name="Capture Poser translations (experimental)", default=False,
+        description="Import position offsets as well as rotations; avatar appearance adjustments can influence these")
 
 
 def choose_rig(scene):
@@ -287,7 +290,7 @@ def _apply_snapshot(scene, rig, snapshot):
                                   @ parent_rotation @ rest_rotation).normalized()
         pb.keyframe_insert(data_path="rotation_quaternion",
                            frame=scene.frame_current, group=name)
-        if name in snapshot["positions"] and settings.positions:
+        if name in snapshot["positions"] and settings.capture_positions:
             sl_offset = Vector(snapshot["positions"][name])
             pb.location = rest_rotation.inverted() @ (inverse_axis @ sl_offset)
             pb.keyframe_insert(data_path="location",
@@ -438,6 +441,7 @@ class BSLL_PT_panel(Panel):
         layout.separator()
         layout.label(text="Firestorm Poser -> Blender")
         layout.prop(settings, "capture_selected_only")
+        layout.prop(settings, "capture_positions")
         row = layout.row()
         row.enabled = _client is None and _capture is None
         row.operator("bsll.capture_viewer_pose", icon="REC")
