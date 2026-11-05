@@ -3271,11 +3271,6 @@ void LLVOAvatar::idleUpdate(LLAgent &agent, const F64 &time)
     // store off last frame's root position to be consistent with camera position
     mLastRootPos = mRoot->getWorldPosition();
     bool detailed_update = updateCharacter(agent);
-    // Local-only Blender preview, applied after the normal motion update.
-    if (isSelf())
-    {
-        BlazingStorm::BlenderLiveLink::instance().apply(this);
-    }
 
     static LLUICachedControl<bool> visualizers_in_calls("ShowVoiceVisualizersInCalls", false);
     bool voice_enabled = (visualizers_in_calls || LLVoiceClient::getInstance()->inProximalChannel()) &&
@@ -5838,6 +5833,14 @@ bool LLVOAvatar::updateCharacter(LLAgent &agent)
             // SL-315
             mRoot->setWorldPosition(pos);
         }
+    }
+
+    // Apply the Blender preview after motion blending but BEFORE head offsets,
+    // skeleton world matrices, skinning and attachment positions are updated.
+    // Late application in idleUpdate left rigged eyes/attachments behind.
+    if (isSelf())
+    {
+        BlazingStorm::BlenderLiveLink::instance().apply(this);
     }
 
     // update head position
