@@ -103,7 +103,7 @@ def _fcurves_for_action(animation_data):
     action = animation_data.action
     try:
         curves = action.fcurves
-        if curves is not None:
+        if curves:
             return curves
     except AttributeError:
         pass
