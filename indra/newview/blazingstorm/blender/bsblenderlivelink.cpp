@@ -11,6 +11,7 @@
 #include "llviewerprecompiledheaders.h"
 #include "blazingstorm/blender/bsblenderlivelink.h"
 
+#include "fsposeranimator.h"
 #include "lljoint.h"
 #include "llquaternion.h"
 #include "llviewercontrol.h"
@@ -218,12 +219,20 @@ struct BlenderLiveLink::Impl
         message["session"] = requested_session;
         json::object joints;
         json::object offsets;
+        // Query Firestorm's *actual* posing motion. Don't turn the user's
+        // unrelated AO, walking or idle animations into Blender keyframes.
+        FSPoserAnimator poser;
+        FSPosingMotion* motion = poser.getPosingMotion(avatar);
+        if (motion && motion->isStopped()) motion = nullptr;
         for (S32 i = 0; i < static_cast<S32>(MAX_JOINTS); ++i)
         {
             LLJoint* joint = avatar->getCharacterJoint(i);
             if (!joint) break;
             const std::string& name = joint->getName();
-            if (name.size() < 2 || name[0] != 'm') continue;
+            if (name.size() < 2 || name[0] != 'm' || !motion) continue;
+            FSJointPose* pose = motion->getJointPoseByJointName(name);
+            if (!pose || !motion->currentlyPosingJoint(joint)
+                || !pose->getJointModified()) continue;
             const LLQuaternion rotation = joint->getRotation();
             joints[name] = json::array{double(rotation.mQ[VW]),
                 double(rotation.mQ[VX]), double(rotation.mQ[VY]),
