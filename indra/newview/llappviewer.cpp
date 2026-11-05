@@ -44,6 +44,7 @@
 #include "llagentlanguage.h"
 #include "llagentui.h"
 #include "llagentwearables.h"
+#include "llimage.h" // <FS:Beq/> [FIRE-36494] Image allocation failure telemetry
 #include "lldirpicker.h"
 #include "llfloaterimcontainer.h"
 #include "llimprocessing.h"
@@ -5301,6 +5302,7 @@ bool LLAppViewer::initCache()
     const uintmax_t disk_cache_size = disk_cache_mb * 1024ULL * 1024ULL;
     // </FS:Ansariel>
     const bool enable_cache_debug_info = gSavedSettings.getBOOL("EnableDiskCacheDebugInfo");
+    std::string cache_purge_path; // <FS:TJ/> Background cache purge the correct path
 
     bool texture_cache_mismatch = false;
     bool remove_vfs_files = false;
@@ -5355,6 +5357,7 @@ bool LLAppViewer::initCache()
         {
             LL_INFOS("AppCache") << "Cache location changed, cache needs purging" << LL_ENDL;
             gDirUtilp->setCacheDir(gSavedSettings.getString("CacheLocation"));
+            cache_purge_path = gDirUtilp->getExpandedFilename(LL_PATH_CACHE, ""); // <FS:TJ/> Background cache purge the correct path
             purgeCache(); // purge old cache
             gDirUtilp->deleteDirAndContents(gDirUtilp->getExpandedFilename(LL_PATH_CACHE, cache_dir_name));
             gSavedSettings.setString("CacheLocation", new_cache_location);
@@ -5370,6 +5373,13 @@ bool LLAppViewer::initCache()
         gSavedSettings.setString("NewCacheLocation", "");
         gSavedSettings.setString("NewCacheLocationTopFolder", "");
     }
+
+    // <FS:TJ> Background cache purge the correct path
+    if (cache_purge_path.empty())
+    {
+        cache_purge_path = gDirUtilp->getExpandedFilename(LL_PATH_CACHE, "");
+    }
+    // </FS:TJ>
 
     // <FS:Ansariel> Sound cache
     if (!gDirUtilp->setSoundCacheDir(gSavedSettings.getString("FSSoundCacheLocation")))
@@ -5440,7 +5450,7 @@ bool LLAppViewer::initCache()
     // </FS:Ansariel>
 
     // <FS:ND> For Windows, purging the cache can take an extraordinary amount of time. Rename the cache dir and purge it using another thread.
-    startCachePurge();
+    startCachePurge(cache_purge_path);
     // </FS:ND>
 
     LLSplashScreen::update(LLTrans::getString("StartupInitializingTextureCache"));
@@ -6935,6 +6945,16 @@ void LLAppViewer::forceErrorBadMemoryAccess()
     *crash = 0xDEADBEEF;
     return;
 }
+
+// <FS:Beq> [FIRE-36494] Force a deliberate LLImageBase allocation failure
+void LLAppViewer::forceErrorImageAllocationFailure()
+{
+    LL_WARNS() << "Forcing a deliberate LLImageBase allocation failure" << LL_ENDL;
+    LLImageBase::forceNextAllocationFailureForTesting();
+    LLPointer<LLImageRaw> image_raw = new LLImageRaw(127, 127, 4);
+    llassert(!image_raw->getData());
+}
+// </FS:Beq>
 
 void LLAppViewer::forceErrorInfiniteLoop()
 {
