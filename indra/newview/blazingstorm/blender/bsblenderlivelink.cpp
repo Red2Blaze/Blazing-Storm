@@ -268,48 +268,60 @@ struct BlenderLiveLink::Impl
         message["version"] = 1;
         message["type"] = stream ? "poser_frame" : "pose_snapshot";
         message["session"] = requested_session;
+
         json::object joints;
         json::object offsets;
-        // Query Firestorm's *actual* posing motion. Don't turn the user's
-        // unrelated AO, walking or idle animations into Blender keyframes.
-        // The Poser animator owns a large joint definition table. Keep it
-        // initialized once; this runs on the viewer main thread only.
+        // Read directly from Firestorm's live motion (not a stale rendered
+        // avatar pose, a separate animator instance's UI selection, or the
+        // last Blender preview). This lets Poser drive a rig even when no
+        // Blender->viewer preview is running.
         static FSPoserAnimator poser;
-        for (S32 i = 0; i < static_cast<S32>(MAX_JOINTS); ++i)
+        FSPosingMotion* motion = poser.getPosingMotionForLiveLink(avatar);
+        const bool poser_active = motion && !motion->isStopped();
+        S32 posed_joint_count = 0;
+        S32 edited_joint_count = 0;
+        if (poser_active)
         {
-            LLJoint* joint = avatar->getCharacterJoint(i);
-            if (!joint) break;
-            const std::string& name = joint->getName();
-            if (name.size() < 2 || name[0] != 'm') continue;
-            const auto* poser_joint = poser.getPoserJointByName(name);
-            if (!poser_joint || !poser.isPosingAvatarJoint(avatar, *poser_joint)
-                || !poser.hasJointBeenChanged(avatar, *poser_joint)) continue;
-            // Export the Poser's own target, never the last rotation applied
-            // by Blender's local preview (which is a rendering override).
-            FSPosingMotion* posing_motion = poser.getPosingMotionForLiveLink(avatar);
-            FSJointPose* user_pose = posing_motion
-                ? posing_motion->getJointPoseByJointName(name) : nullptr;
-            if (!user_pose) continue;
-            const LLQuaternion rotation = user_pose->getTargetRotation();
-            joints[name] = json::array{double(rotation.mQ[VW]),
-                double(rotation.mQ[VX]), double(rotation.mQ[VY]),
-                double(rotation.mQ[VZ])};
-            const LLVector3 offset = user_pose->getTargetPosition() - joint->getDefaultPosition();
-            if (offset.lengthSquared() > 0.000001f)
+            for (S32 i = 0; i < static_cast<S32>(MAX_JOINTS); ++i)
             {
-                offsets[name] = json::array{double(offset.mV[VX]),
-                    double(offset.mV[VY]), double(offset.mV[VZ])};
+                LLJoint* joint = avatar->getCharacterJoint(i);
+                if (!joint) break;
+                const std::string& name = joint->getName();
+                if (name.size() < 2 || name[0] != 'm') continue;
+                FSJointPose* pose = motion->getJointPoseByJointName(name);
+                if (!pose || !motion->currentlyPosingJoint(pose)) continue;
+                ++posed_joint_count;
+                // Only emit bones explicitly changed with Poser. Every
+                // avatar joint can be registered with the Poser motion,
+                // but unmodified ones must continue playing Blender tracks.
+                if (!pose->getJointModified()) continue;
+                ++edited_joint_count;
+                const LLQuaternion rotation = pose->getTargetRotation();
+                joints[name] = json::array{double(rotation.mQ[VW]),
+                    double(rotation.mQ[VX]), double(rotation.mQ[VY]),
+                    double(rotation.mQ[VZ])};
+                const LLVector3 offset = pose->getTargetPosition()
+                    - joint->getDefaultPosition();
+                if (offset.lengthSquared() > 0.000001f)
+                {
+                    offsets[name] = json::array{double(offset.mV[VX]),
+                        double(offset.mV[VY]), double(offset.mV[VZ])};
+                }
             }
         }
         message["joints"] = std::move(joints);
         message["positions"] = std::move(offsets);
+        // Diagnostics tell Blender whether the stream is connected but Poser
+        // has not started, or whether edited bones failed to match the rig.
+        message["poser_active"] = poser_active;
+        message["posed_count"] = static_cast<std::int64_t>(posed_joint_count);
+        message["edited_count"] = static_cast<std::int64_t>(edited_joint_count);
         const auto now = Clock::now();
         if (stream)
         {
             const std::string payload = json::serialize(message);
             if (payload == last_poser_payload
                 && now - poser_last_send < POSER_STREAM_HEARTBEAT) return;
-            // Only a real changed pose or a heartbeat advances sequence.
             last_poser_payload = payload;
             message["seq"] = static_cast<std::int64_t>(++poser_stream_sequence);
         }
