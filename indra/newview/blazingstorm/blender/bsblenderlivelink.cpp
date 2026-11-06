@@ -158,6 +158,7 @@ struct BlenderLiveLink::Impl
     std::string poser_session;
     Clock::time_point poser_last_subscribe{};
     Clock::time_point poser_last_send{};
+    Clock::time_point poser_last_check{};
     std::string last_poser_payload;
     std::uint64_t poser_stream_sequence = 0;
 
@@ -254,7 +255,9 @@ struct BlenderLiveLink::Impl
         json::object offsets;
         // Query Firestorm's *actual* posing motion. Don't turn the user's
         // unrelated AO, walking or idle animations into Blender keyframes.
-        FSPoserAnimator poser;
+        // The Poser animator owns a large joint definition table. Keep it
+        // initialized once; this runs on the viewer main thread only.
+        static FSPoserAnimator poser;
         for (S32 i = 0; i < static_cast<S32>(MAX_JOINTS); ++i)
         {
             LLJoint* joint = avatar->getCharacterJoint(i);
@@ -330,6 +333,7 @@ struct BlenderLiveLink::Impl
                 poser_stream_sequence = 0;
                 last_poser_payload.clear();
                 poser_last_send = Clock::time_point{};
+                poser_last_check = Clock::time_point{};
             }
             poser_streaming = true;
             poser_session = incoming_session;
@@ -418,7 +422,8 @@ struct BlenderLiveLink::Impl
             stop_poser_stream();
             return;
         }
-        if (now - poser_last_send < POSER_STREAM_INTERVAL) return;
+        if (now - poser_last_check < POSER_STREAM_INTERVAL) return;
+        poser_last_check = now;
         reply_snapshot(poser_peer, avatar, poser_session, true);
     }
 
