@@ -307,6 +307,19 @@ class FSJointPose
         LLVector3    getTargetPosition() const { return mPosition + mBasePosition; }
         LLVector3    getTargetScale() const { return mScale + mBaseScale; }
 
+        // Keep Live Link's remote preview aligned with the Poser target,
+        // without creating a Poser user edit or adding to the undo history.
+        // Base transforms are private to FSJointState.
+        void setLiveLinkTargetRotation(const LLQuaternion& target)
+        {
+            mRotation.set(target * ~mBaseRotation);
+        }
+
+        void setLiveLinkTargetPosition(const LLVector3& target)
+        {
+            mPosition.set(target - mBasePosition);
+        }
+
         void reflectRotation()
         {
             reflectBaseRotation();
