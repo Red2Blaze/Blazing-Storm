@@ -1137,6 +1137,16 @@
 						 top_pad="5"
 						 width="134" />
 						<check_box
+						 control_name="BSBlenderLiveLinkEnabled"
+						 name="blender_live_link_checkbox"
+						 height="16"
+						 label="Enable Blender Live Link"
+						 follows="left|top"
+						 left="5"
+						 tool_tip="Allow Blender to follow your local Firestorm Poser joint edits. In Blender's Blazing tab choose Follow Firestorm Poser; enable the visual manipulators below for on-avatar XYZ axes."
+						 top_pad="5"
+						 width="190" />
+						<check_box
 						 control_name="RenderDepthOfFieldInEditMode"
 						 name="dof_edit_mode_checkbox"
 						 height="16"

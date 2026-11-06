@@ -3271,11 +3271,6 @@ void LLVOAvatar::idleUpdate(LLAgent &agent, const F64 &time)
     // store off last frame's root position to be consistent with camera position
     mLastRootPos = mRoot->getWorldPosition();
     bool detailed_update = updateCharacter(agent);
-    // Local-only Blender preview, applied after the normal motion update.
-    if (isSelf())
-    {
-        BlazingStorm::BlenderLiveLink::instance().apply(this);
-    }
 
     static LLUICachedControl<bool> visualizers_in_calls("ShowVoiceVisualizersInCalls", false);
     bool voice_enabled = (visualizers_in_calls || LLVoiceClient::getInstance()->inProximalChannel()) &&
@@ -4832,9 +4827,15 @@ bool LLVOAvatar::isRlvSilhouette() const
     if (!RlvActions::hasBehaviour(RLV_BHVR_SETCAM_AVDIST))
         return false;
 
-    // <FS> FIRE-34340-2 RLV silhouette should not override the user's complexity settings
-    if (isSelf() || isTooComplex() || isTooSlowWithoutShadows())
+    // <FS> FIRE-34340-2 Your own avatar and attached animesh shouldn't be a silhouette
+    if (isSelf())
         return false;
+
+    if (const LLVOAvatar* wearer = getAttachedAvatar())
+    {
+        if (wearer->isSelf())
+            return false;
+    }
     // </FS>
 
     static RlvCachedBehaviourModifier<float> s_nSetCamAvDist(RLV_MODIFIER_SETCAM_AVDIST);
@@ -5838,6 +5839,14 @@ bool LLVOAvatar::updateCharacter(LLAgent &agent)
             // SL-315
             mRoot->setWorldPosition(pos);
         }
+    }
+
+    // Apply the Blender preview after motion blending but BEFORE head offsets,
+    // skeleton world matrices, skinning and attachment positions are updated.
+    // Late application in idleUpdate left rigged eyes/attachments behind.
+    if (isSelf())
+    {
+        BlazingStorm::BlenderLiveLink::instance().apply(this);
     }
 
     // update head position
@@ -9800,6 +9809,12 @@ bool LLVOAvatar::hasFirstFullAttachmentData() const
 
 bool LLVOAvatar::isTooComplex() const
 {
+    // [RLVa] FIRE-35778 @camavdist:1=n RLVa command turns avatars invisible instead of a silhouette (fix from Ellie Sable)
+    if (isRlvSilhouette())
+    {
+        return true;
+    }
+    // [/RLVa]
     bool too_complex;
     static LLCachedControl<S32> complexity_render_mode(gSavedSettings, "RenderAvatarComplexityMode");
     bool render_friend =  (isBuddy() && complexity_render_mode > AV_RENDER_LIMIT_BY_COMPLEXITY);
@@ -12259,6 +12274,13 @@ bool LLVOAvatar::isImpostor()
     // <FS:minerjr> [FIRE-35735] Imposter/Impostor Avatar Exclusions
     static LLCachedControl<U32> impostor_avatar_exclude(gSavedSettings,"FSImpostorAvatarExclude", 0);
 
+    // <FS> FIRE-34340-2 RLV silhouettes must be impostored
+    if (isRlvSilhouette())
+    {
+        return true;
+    }
+    // </FS>
+
     // Store the result of is visually muted as used in possibly 2 places
     bool is_visual_muted = isVisuallyMuted();
 
@@ -12273,9 +12295,6 @@ bool LLVOAvatar::isImpostor()
             // isVisuallyMuted() ||
             is_visual_muted || // Save from calling isVisuallyMuted a second time
             // </FS:minerjr> [FIRE-35735]
-            // <FS> FIRE-34340-2 RLV silhouettes must be impostored
-            isRlvSilhouette() ||
-            // </FS>
             isTooSlowWithoutShadows() ||
             (sLimitNonImpostors && (mUpdatePeriod > 1) )
     );
@@ -13272,6 +13291,12 @@ LLVOAvatar::AvatarOverallAppearance LLVOAvatar::getOverallAppearance() const
         {
             result = AOA_INVISIBLE;
         }
+        // <FS> FIRE-34340-2 RLV silhouettes take priority over Always Render
+        else if (isRlvSilhouette() && (!isControlAvatar() || getAttachedAvatar()))
+        {
+            result = AOA_JELLYDOLL;
+        }
+        // </FS>
         else if (mVisuallyMuteSetting == AV_ALWAYS_RENDER)
         {
             result = AOA_NORMAL;

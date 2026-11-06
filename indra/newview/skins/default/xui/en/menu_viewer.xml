@@ -1057,16 +1057,52 @@
              function="Floater.Toggle"
              parameter="fs_radar" />
         </menu_item_check>
-        <menu_item_check
-         label="Blazing Storm Remote Control"
-         name="Blazing Storm Remote Control">
-            <menu_item_check.on_check
-             function="Floater.Visible"
-             parameter="blazing_storm_remote" />
-            <menu_item_check.on_click
-             function="Floater.Toggle"
-             parameter="blazing_storm_remote" />
-        </menu_item_check>
+        <!-- Blazing Storm tools live together in the World menu. -->
+        <menu
+         label="Blazing Storm"
+         name="Blazing Storm"
+         tear_off="true">
+            <menu_item_check
+             label="Remote Control"
+             name="Blazing Storm Remote Control">
+                <menu_item_check.on_check
+                 function="Floater.Visible"
+                 parameter="blazing_storm_remote" />
+                <menu_item_check.on_click
+                 function="Floater.Toggle"
+                 parameter="blazing_storm_remote" />
+            </menu_item_check>
+            <menu_item_separator/>
+            <menu_item_check
+             label="Enable Blender Live Link"
+             name="Blender Live Link Enabled">
+                <menu_item_check.on_check
+                 function="CheckControl"
+                 parameter="BSBlenderLiveLinkEnabled" />
+                <menu_item_check.on_click
+                 function="ToggleControl"
+                 parameter="BSBlenderLiveLinkEnabled" />
+            </menu_item_check>
+            <menu_item_call
+             label="Firestorm Poser (XYZ Axes)..."
+             name="Blazing Storm Poser"
+             tool_tip="Open Firestorm Poser; enable its Visual Manipulators button for on-avatar XYZ axes and rotation rings">
+                <menu_item_call.on_click
+                 function="Floater.Toggle"
+                 parameter="fs_poser" />
+            </menu_item_call>
+            <menu_item_check
+             label="Show Poser Joint Markers"
+             name="Blazing Storm Poser Markers"
+             tool_tip="Show joint markers while using Firestorm Poser's Visual Manipulators">
+                <menu_item_check.on_check
+                 function="CheckControl"
+                 parameter="FSManipShowJointMarkers" />
+                <menu_item_check.on_click
+                 function="ToggleControl"
+                 parameter="FSManipShowJointMarkers" />
+            </menu_item_check>
+        </menu>
 
 
         <menu_item_call
@@ -4258,6 +4294,12 @@
              name="Force Bad Memory Access in Coroutine">
                 <menu_item_call.on_click
                  function="Advanced.ForceErrorBadMemoryAccessCoro" />
+            </menu_item_call>
+            <menu_item_call
+             label="Force Image Allocation Failure"
+             name="Force Image Allocation Failure">
+                <menu_item_call.on_click
+                 function="Advanced.ForceErrorImageAllocationFailure" />
             </menu_item_call>
             <menu_item_call
              label="Force Infinite Loop"
