@@ -62,6 +62,23 @@ that edited count increases after moving a joint, and that the bone name
 exists in the selected Avastar deform armature. Per-bone axis mapping
 affects the direction but not whether a joint arrives.
 
+### Same-joint bidirectional handoff (v0.2.12 add-on)
+
+The current implementation uses **last edited joint wins** rather than a
+permanent Poser priority. When Blender modifies an Avastar control after a
+Poser edit, Blender sends a monotonically increasing `blender_edits` revision
+for the matching deform joint. The viewer marks that joint Blender-owned
+until its actual Poser motion target changes again. A repeating frame or
+heartbeat has no ownership effect. The viewer omits Blender-owned joints
+from its Poser stream, allowing the add-on to acknowledge handoff and avoid
+echoing the previously received Pose target.
+
+To verify, move Head in Blender, move mHead in Firestorm Poser, move Head
+again in Blender, then move mHead again in Firestorm Poser. Both programs
+should follow each change in sequence without stopping Live Link. Rebuild
+the viewer **and** reinstall Blender add-on v0.2.12 for this protocol update.
+Avastar constraints/IK and concurrent manipulations still need in-world tests.
+
 ### Simultaneous animation preview + Firestorm Poser edits (v0.2.8 add-on)
 
 The previous implementation **intentionally rejected** incoming Poser stream
@@ -69,8 +86,8 @@ subscriptions while a Blender→viewer preview was active and disabled
 **Follow Firestorm Poser** on the Blender side. That is now changed. The two
 loopback sessions can run at once, with **per-joint ownership**:
 
-- Blender previews all requested animation joints **except those actively
-  edited in Firestorm Poser**; Poser overrides only the modified joints.
+- Blender previews all requested animation joints **except those currently
+  owned by Firestorm Poser**; ownership now changes with each actual edit.
 - The viewer sends its **Poser motion target rotations**, not the joint's
   last rendered value after Blender's preview. This prevents the echoed
   Blender pose from being mistaken for a new Poser edit.
@@ -83,7 +100,7 @@ loopback sessions can run at once, with **per-joint ownership**:
 - Keyframe writes remain manual unless the user explicitly enables
   **Auto-key changed Poser poses**.
 
-**Required:** rebuild the viewer from this branch and install the v0.2.8
+**Required for latest bidirectional handoff:** rebuild the viewer and install the v0.2.12
 ZIP from [SL-Blender_LiveLink](https://github.com/Red2Blaze/SL-Blender_LiveLink).
 Just pulling the source is insufficient. Test a single head joint first
 while the rest of an animation is running. This feature is local-only
