@@ -27,6 +27,41 @@ The Blender add-on is maintained separately in **[SL-Blender_LiveLink](https://g
 - **Blender to SL axes** offers Avastar forward conversion (+90 degrees about Z) and alternate yaw presets. If an arm moves along the wrong axis, switch this before rewriting animation keys. Bone rest orientation is also accounted for in v0.2.
 - **Transfer keyed/moved positions** also previews non-pelvis local bone translations. Pelvis translation remains separately opt-in because it can move the avatar unexpectedly.
 
+### Diagnosing Firestorm Poser edits not appearing in Blender (v0.2.10)
+
+The viewer now samples joints directly from the **currently active Firestorm
+Poser motion**, rather than cross-checking against a separate list of Poser
+joint definitions. The loopback `poser_frame` payload includes three
+optional diagnostics:
+
+- `poser_active` — whether the avatar's Poser motion is active
+- `posed_count` — joints currently controlled by that motion
+- `edited_count` — joints explicitly edited by Poser this session
+
+The Blender add-on v0.2.10 displays connected/active/edited-joint and
+matching Blender-bone counts. It also reapplies the last received Poser edit
+while Blender reevaluates its animation; previously it applied only on new
+network frames, so the animation could immediately overwrite the adjustment.
+
+For a **Blender animation → Firestorm minor corrections** workflow, first
+start Blender preview and move the timeline to the pose you want to edit,
+then start posing in Firestorm Poser (to initialize its base pose), enable
+the visual XYZ manipulator and move an arm/head joint. Follow mode in Blender
+receives only the joints actually changed by Poser; other animated bones
+remain controlled by Blender.
+
+For an **entire pose made inside Firestorm**, start Firestorm Poser without
+a Blender preview and click **Follow Firestorm Poser** in Blender. Use
+**Keyframe Current Poser Pose** when you want to record edited joints into
+the current Blender frame. This does not directly modify existing uploaded
+Second Life animations.
+
+**Requires the latest viewer build plus add-on v0.2.10.** Debugging order:
+check that Blender reports the Poser stream connected, that Poser is active,
+that edited count increases after moving a joint, and that the bone name
+exists in the selected Avastar deform armature. Per-bone axis mapping
+affects the direction but not whether a joint arrives.
+
 ### Simultaneous animation preview + Firestorm Poser edits (v0.2.8 add-on)
 
 The previous implementation **intentionally rejected** incoming Poser stream
