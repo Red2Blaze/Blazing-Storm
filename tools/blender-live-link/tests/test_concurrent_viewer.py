@@ -64,7 +64,14 @@ class TestConcurrentViewerPosing(unittest.TestCase):
         pose_cpp = (VIEWER.parents[2] / "fsjointpose.cpp").read_text(encoding="utf-8")
         silent_rotation = pose_cpp.split("void FSJointPose::setLiveLinkTargetRotation")[1].split("void FSJointPose::setLiveLinkTargetPosition")[0]
         self.assertNotIn("addStateToUndo", silent_rotation)
-        self.assertIn("mCurrentState.mRotation", silent_rotation)
+        self.assertIn("mCurrentState.setLiveLinkTargetRotation(target)", silent_rotation)
+        self.assertNotIn("mCurrentState.mBaseRotation", silent_rotation)
+        pose_header = (VIEWER.parents[2] / "fsjointpose.h").read_text(encoding="utf-8")
+        self.assertIn("void setLiveLinkTargetRotation(const LLQuaternion& target)", pose_header)
+        self.assertIn("void setLiveLinkTargetPosition(const LLVector3& target)", pose_header)
+        # Private base transforms may only be used inside FSJointState.
+        self.assertIn("mRotation.set(target * ~mBaseRotation)", pose_header)
+        self.assertIn("mPosition.set(target - mBasePosition)", pose_header)
 
     def test_stream_subscription_expires_and_never_opens_public_listener(self):
         self.assertIn("POSER_STREAM_TIMEOUT", self.source)
