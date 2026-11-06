@@ -265,6 +265,13 @@ class FSJointPose
 
     LLQuaternion getTargetRotation() const { return mCurrentState.getTargetRotation(); }
     LLVector3    getTargetPosition() const { return mCurrentState.getTargetPosition(); }
+
+    // Silent Live Link baseline updates. These are remote Blender previews,
+    // not user Poser edits: do not mark modified or add to Poser's undo stack.
+    // Keep the public delta in sync so the next manual Poser movement starts
+    // from the current Blender pose rather than snapping to an old target.
+    void setLiveLinkTargetRotation(const LLQuaternion& target);
+    void setLiveLinkTargetPosition(const LLVector3& target);
     LLVector3    getTargetScale() const { return mCurrentState.getTargetScale(); }
 
     /// <summary>
