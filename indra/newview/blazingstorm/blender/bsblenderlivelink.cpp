@@ -162,6 +162,20 @@ struct BlenderLiveLink::Impl
     std::string last_poser_payload;
     std::uint64_t poser_stream_sequence = 0;
 
+    // A modified Firestorm Poser joint takes precedence over incoming
+    // Blender pose data for that *joint only*. All other joints still follow
+    // Blender. Query the Poser motion, not the rendered skeleton, so the
+    // final Blender override never feeds back into Poser stream packets.
+    bool poser_controls_joint(LLVOAvatar* avatar, const std::string& name) const
+    {
+        static FSPoserAnimator poser;
+        FSPosingMotion* motion = poser.getPosingMotion(avatar);
+        if (!motion || motion->isStopped()) return false;
+        FSJointPose* joint_pose = motion->getJointPoseByJointName(name);
+        return joint_pose && motion->currentlyPosingJoint(joint_pose)
+            && joint_pose->getJointModified();
+    }
+
     void stop_poser_stream()
     {
         poser_streaming = false;
@@ -207,14 +221,16 @@ struct BlenderLiveLink::Impl
         {
             if (LLJoint* joint = avatar->getJoint(entry.first))
             {
-                joint->setRotation(entry.second);
+                if (!poser_controls_joint(avatar, entry.first))
+                    joint->setRotation(entry.second);
             }
         }
         for (const auto& entry : previous_positions)
         {
             if (LLJoint* joint = avatar->getJoint(entry.first))
             {
-                joint->setPosition(entry.second);
+                if (!poser_controls_joint(avatar, entry.first))
+                    joint->setPosition(entry.second);
             }
         }
         previous_positions.clear();
@@ -223,7 +239,8 @@ struct BlenderLiveLink::Impl
         {
             if (LLJoint* joint = avatar->getJoint("mPelvis"))
             {
-                joint->setPosition(previous_pelvis);
+                if (!poser_controls_joint(avatar, "mPelvis"))
+                    joint->setPosition(previous_pelvis);
             }
         }
         previous_rotations.clear();
@@ -267,11 +284,17 @@ struct BlenderLiveLink::Impl
             const auto* poser_joint = poser.getPoserJointByName(name);
             if (!poser_joint || !poser.isPosingAvatarJoint(avatar, *poser_joint)
                 || !poser.hasJointBeenChanged(avatar, *poser_joint)) continue;
-            const LLQuaternion rotation = joint->getRotation();
+            // Export the Poser's own target, never the last rotation applied
+            // by Blender's local preview (which is a rendering override).
+            FSPosingMotion* posing_motion = poser.getPosingMotion(avatar);
+            FSJointPose* user_pose = posing_motion
+                ? posing_motion->getJointPoseByJointName(name) : nullptr;
+            if (!user_pose) continue;
+            const LLQuaternion rotation = user_pose->getTargetRotation();
             joints[name] = json::array{double(rotation.mQ[VW]),
                 double(rotation.mQ[VX]), double(rotation.mQ[VY]),
                 double(rotation.mQ[VZ])};
-            const LLVector3 offset = joint->getPosition() - joint->getDefaultPosition();
+            const LLVector3 offset = user_pose->getTargetPosition() - joint->getDefaultPosition();
             if (offset.lengthSquared() > 0.000001f)
             {
                 offsets[name] = json::array{double(offset.mV[VX]),
@@ -325,9 +348,10 @@ struct BlenderLiveLink::Impl
         if (!sequence_from_json(*seq, incoming_seq)) return;
         if (type->as_string() == "poser_stream_start")
         {
-            // Subscription doubles as a heartbeat. Reject it while the
-            // viewer is actively following Blender to avoid circular sync.
-            if (active) return;
+            // Keep one-way streams logically independent, so Blender can
+            // preview an animation *while* Firestorm Poser edits some joints.
+            // Modified Poser joints take priority in apply(); each client
+            // listens on its own ephemeral loopback UDP port.
             if (!poser_streaming || incoming_session != poser_session || peer != poser_peer)
             {
                 poser_stream_sequence = 0;
@@ -350,9 +374,9 @@ struct BlenderLiveLink::Impl
         }
         if (type->as_string() == "snapshot_request")
         {
-            // Capture only while the live preview is stopped, avoiding an
-            // accidental round trip of the viewer's own streamed transforms.
-            if (!active) reply_snapshot(peer, avatar, incoming_session);
+            // Snapshot reads only joints actually edited in Firestorm Poser,
+            // not Blender's latest skeleton override.
+            reply_snapshot(peer, avatar, incoming_session);
             return;
         }
         if (type->as_string() == "stop")
@@ -362,9 +386,8 @@ struct BlenderLiveLink::Impl
             return;
         }
         if (type->as_string() != "pose") return;
-        // The client must explicitly leave viewer->Blender mode before
-        // switching back to incoming pose preview.
-        if (poser_streaming) return;
+        // Both channels may be active. Per-joint ownership below avoids
+        // feeding Blender's preview back over the Poser-only stream.
         const auto* pose = obj->if_contains("joints");
         if (!pose) return;
         std::unordered_map<std::string, LLQuaternion> incoming;
@@ -381,7 +404,11 @@ struct BlenderLiveLink::Impl
         {
             if (incoming.find(it->first) == incoming.end())
             {
-                if (LLJoint* joint = avatar->getJoint(it->first)) joint->setRotation(it->second);
+                if (LLJoint* joint = avatar->getJoint(it->first))
+                {
+                    if (!poser_controls_joint(avatar, it->first))
+                        joint->setRotation(it->second);
+                }
                 it = previous_rotations.erase(it);
             }
             else ++it;
@@ -392,14 +419,19 @@ struct BlenderLiveLink::Impl
             if (incoming_positions.find(it->first) == incoming_positions.end())
             {
                 if (LLJoint* joint = avatar->getJoint(it->first))
-                    joint->setPosition(it->second);
+                    if (!poser_controls_joint(avatar, it->first))
+                        joint->setPosition(it->second);
                 it = previous_positions.erase(it);
             }
             else ++it;
         }
         if (previous_pelvis_valid && !incoming_pelvis_enabled)
         {
-            if (LLJoint* joint = avatar->getJoint("mPelvis")) joint->setPosition(previous_pelvis);
+            if (LLJoint* joint = avatar->getJoint("mPelvis"))
+            {
+                if (!poser_controls_joint(avatar, "mPelvis"))
+                    joint->setPosition(previous_pelvis);
+            }
             previous_pelvis_valid = false;
         }
         rotations = std::move(incoming);
@@ -415,7 +447,7 @@ struct BlenderLiveLink::Impl
 
     void maybe_stream_poser(LLVOAvatar* avatar)
     {
-        if (!poser_streaming || active) return;
+        if (!poser_streaming) return;
         const auto now = Clock::now();
         if (now - poser_last_subscribe > POSER_STREAM_TIMEOUT)
         {
@@ -479,6 +511,13 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
     {
         LLJoint* joint = avatar->getJoint(entry.first);
         if (!joint) continue;
+        if (link.poser_controls_joint(avatar, entry.first))
+        {
+            // Poser's target rotations override the Blender preview for
+            // edited joints. Keep all the other Blender tracks running.
+            link.previous_rotations.erase(entry.first);
+            continue;
+        }
         if (link.previous_rotations.find(entry.first) == link.previous_rotations.end())
         {
             link.previous_rotations.emplace(entry.first, joint->getRotation());
@@ -489,6 +528,11 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
     {
         if (LLJoint* joint = avatar->getJoint(entry.first))
         {
+            if (link.poser_controls_joint(avatar, entry.first))
+            {
+                link.previous_positions.erase(entry.first);
+                continue;
+            }
             auto found = link.previous_positions.find(entry.first);
             if (found == link.previous_positions.end())
             {
@@ -502,6 +546,7 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
     {
         if (LLJoint* joint = avatar->getJoint("mPelvis"))
         {
+            if (link.poser_controls_joint(avatar, "mPelvis")) return;
             if (!link.previous_pelvis_valid)
             {
                 link.previous_pelvis = joint->getPosition();
