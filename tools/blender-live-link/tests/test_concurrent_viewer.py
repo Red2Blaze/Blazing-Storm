@@ -1,3 +1,7 @@
+# $LicenseInfo:firstyear=2026&license=viewerlgpl$
+# Copyright (C) 2026 Blazing Storm contributors
+# $/LicenseInfo$
+
 """Static regression checks for the viewer's simultaneous Live Link behavior.
 
 Runs without the Windows/macOS viewer SDK; a separate C++ build is still
