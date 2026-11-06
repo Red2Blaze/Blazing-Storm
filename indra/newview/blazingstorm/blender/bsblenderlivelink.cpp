@@ -19,6 +19,7 @@
 
 #include <boost/asio.hpp>
 #include <boost/json.hpp>
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -172,6 +173,9 @@ struct BlenderLiveLink::Impl
         LLVector3 position;
     };
     std::unordered_map<std::string, PoserTarget> last_poser_targets;
+    // Keep temporary Blender preview changes out of the persistent Poser
+    // state when Live Link stops, unless the user has since edited in Poser.
+    std::unordered_map<std::string, PoserTarget> original_poser_targets;
     std::unordered_map<std::string, std::uint64_t> blender_edit_revisions;
     std::unordered_set<std::string> blender_owned;
 
@@ -197,15 +201,22 @@ struct BlenderLiveLink::Impl
                 bool changed = previous == last_poser_targets.end();
                 if (!changed)
                 {
-                    float dot = 0.f;
+                    // Quaternions q and -q represent the same rotation.
+                    float delta = 0.f, opposite = 0.f;
                     for (int j = 0; j < 4; ++j)
-                        dot += previous->second.rotation.mQ[j] * current.rotation.mQ[j];
-                    changed = std::abs(std::abs(dot) - 1.f) > 0.00001f
+                    {
+                        const float a = previous->second.rotation.mQ[j];
+                        const float b = current.rotation.mQ[j];
+                        delta += (a - b) * (a - b);
+                        opposite += (a + b) * (a + b);
+                    }
+                    changed = std::min(delta, opposite) > 0.00000001f
                         || (current.position - previous->second.position).lengthSquared() > 0.00000001f;
                 }
                 if (changed)
                 {
                     blender_owned.erase(name);
+                    original_poser_targets.erase(name); // user edit supersedes temporary baseline
                     last_poser_targets[name] = current;
                 }
             }
@@ -216,6 +227,44 @@ struct BlenderLiveLink::Impl
                 it = last_poser_targets.erase(it);
             else ++it;
         }
+    }
+
+    void rebase_poser_target(LLVOAvatar* avatar, const std::string& name,
+                             const LLQuaternion* rotation, const LLVector3* position)
+    {
+        static FSPoserAnimator poser;
+        FSPosingMotion* motion = poser.getPosingMotionForLiveLink(avatar);
+        if (!motion || motion->isStopped()) return;
+        FSJointPose* pose = motion->getJointPoseByJointName(name);
+        if (!pose || !motion->currentlyPosingJoint(pose)) return;
+        if (original_poser_targets.count(name) == 0)
+            original_poser_targets.emplace(name,
+                PoserTarget{pose->getTargetRotation(), pose->getTargetPosition()});
+        if (rotation) pose->setLiveLinkTargetRotation(*rotation);
+        if (position) pose->setLiveLinkTargetPosition(*position);
+        // A remote preview is NOT a Poser user edit. Remember this target
+        // so the next observer pass does not accidentally transfer control.
+        if (pose->getJointModified())
+            last_poser_targets[name] =
+                PoserTarget{pose->getTargetRotation(), pose->getTargetPosition()};
+    }
+
+    void restore_poser_targets(LLVOAvatar* avatar)
+    {
+        static FSPoserAnimator poser;
+        FSPosingMotion* motion = poser.getPosingMotionForLiveLink(avatar);
+        if (motion && !motion->isStopped())
+        {
+            for (const auto& entry : original_poser_targets)
+            {
+                FSJointPose* pose = motion->getJointPoseByJointName(entry.first);
+                if (!pose || !motion->currentlyPosingJoint(pose)) continue;
+                pose->setLiveLinkTargetRotation(entry.second.rotation);
+                pose->setLiveLinkTargetPosition(entry.second.position);
+            }
+        }
+        original_poser_targets.clear();
+        last_poser_targets.clear();
     }
 
     // Read the Poser motion target rather than the rendered skeleton (which
@@ -273,6 +322,7 @@ struct BlenderLiveLink::Impl
 
     void restore(LLVOAvatar* avatar)
     {
+        restore_poser_targets(avatar);
         for (const auto& entry : previous_rotations)
         {
             if (LLJoint* joint = avatar->getJoint(entry.first))
@@ -620,6 +670,7 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
         {
             link.previous_rotations.emplace(entry.first, joint->getRotation());
         }
+        link.rebase_poser_target(avatar, entry.first, &entry.second, nullptr);
         joint->setRotation(entry.second);
     }
     for (const auto& entry : link.positions)
@@ -636,7 +687,9 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
             {
                 found = link.previous_positions.emplace(entry.first, joint->getPosition()).first;
             }
-            joint->setPosition(found->second + entry.second);
+            const LLVector3 target = found->second + entry.second;
+            link.rebase_poser_target(avatar, entry.first, nullptr, &target);
+            joint->setPosition(target);
         }
     }
     // Legacy clients may still send an absolute pelvis value.
@@ -650,6 +703,7 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
                 link.previous_pelvis = joint->getPosition();
                 link.previous_pelvis_valid = true;
             }
+            link.rebase_poser_target(avatar, "mPelvis", nullptr, &link.pelvis);
             joint->setPosition(link.pelvis);
         }
     }
