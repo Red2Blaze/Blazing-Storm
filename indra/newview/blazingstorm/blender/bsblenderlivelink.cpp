@@ -38,6 +38,9 @@ constexpr unsigned short PORT = 27779;
 constexpr std::size_t MAX_PACKET_BYTES = 32768;
 constexpr std::size_t MAX_JOINTS = 256;
 constexpr auto TIMEOUT = std::chrono::milliseconds(1500);
+constexpr auto POSER_STREAM_TIMEOUT = std::chrono::milliseconds(3500);
+constexpr auto POSER_STREAM_INTERVAL = std::chrono::milliseconds(50);
+constexpr auto POSER_STREAM_HEARTBEAT = std::chrono::milliseconds(1000);
 constexpr const char* PROTOCOL = "bs-blender-live-link";
 
 bool extract_number(const json::value& v, float& out)
@@ -148,6 +151,36 @@ struct BlenderLiveLink::Impl
     LLVector3 previous_pelvis;
     bool previous_pelvis_valid = false;
 
+    // Separate, explicit viewer->Blender stream, with a short-lived lease.
+    // The peer is accepted only through the loopback-only receive socket.
+    bool poser_streaming = false;
+    udp::endpoint poser_peer;
+    std::string poser_session;
+    Clock::time_point poser_last_subscribe{};
+    Clock::time_point poser_last_send{};
+    std::string last_poser_payload;
+    std::uint64_t poser_stream_sequence = 0;
+
+    void stop_poser_stream()
+    {
+        poser_streaming = false;
+        poser_session.clear();
+        last_poser_payload.clear();
+        poser_stream_sequence = 0;
+    }
+
+    void reply_poser_stream_ack(const udp::endpoint& peer, const std::string& session_id)
+    {
+        json::object message;
+        message["protocol"] = PROTOCOL;
+        message["version"] = 1;
+        message["type"] = "poser_stream_ack";
+        message["session"] = session_id;
+        const std::string wire = json::serialize(message);
+        boost::system::error_code ignored;
+        socket->send_to(asio::buffer(wire), peer, 0, ignored);
+    }
+
     bool open()
     {
         if (socket && socket->is_open()) return true;
@@ -210,12 +243,12 @@ struct BlenderLiveLink::Impl
     }
 
     void reply_snapshot(const udp::endpoint& peer, LLVOAvatar* avatar,
-                        const std::string& requested_session)
+                        const std::string& requested_session, bool stream = false)
     {
         json::object message;
         message["protocol"] = PROTOCOL;
         message["version"] = 1;
-        message["type"] = "pose_snapshot";
+        message["type"] = stream ? "poser_frame" : "pose_snapshot";
         message["session"] = requested_session;
         json::object joints;
         json::object offsets;
@@ -244,10 +277,21 @@ struct BlenderLiveLink::Impl
         }
         message["joints"] = std::move(joints);
         message["positions"] = std::move(offsets);
+        const auto now = Clock::now();
+        if (stream)
+        {
+            const std::string payload = json::serialize(message);
+            if (payload == last_poser_payload
+                && now - poser_last_send < POSER_STREAM_HEARTBEAT) return;
+            // Only a real changed pose or a heartbeat advances sequence.
+            last_poser_payload = payload;
+            message["seq"] = static_cast<std::int64_t>(++poser_stream_sequence);
+        }
         const std::string wire = json::serialize(message);
         if (wire.size() > MAX_PACKET_BYTES) return;
         boost::system::error_code ignored;
         socket->send_to(asio::buffer(wire), peer, 0, ignored);
+        if (stream && !ignored) poser_last_send = now;
     }
 
     void ingest(const char* buffer, std::size_t count, const udp::endpoint& peer,
@@ -276,6 +320,30 @@ struct BlenderLiveLink::Impl
         }
         std::uint64_t incoming_seq = 0;
         if (!sequence_from_json(*seq, incoming_seq)) return;
+        if (type->as_string() == "poser_stream_start")
+        {
+            // Subscription doubles as a heartbeat. Reject it while the
+            // viewer is actively following Blender to avoid circular sync.
+            if (active) return;
+            if (!poser_streaming || incoming_session != poser_session || peer != poser_peer)
+            {
+                poser_stream_sequence = 0;
+                last_poser_payload.clear();
+                poser_last_send = Clock::time_point{};
+            }
+            poser_streaming = true;
+            poser_session = incoming_session;
+            poser_peer = peer;
+            poser_last_subscribe = Clock::now();
+            reply_poser_stream_ack(peer, incoming_session);
+            return;
+        }
+        if (type->as_string() == "poser_stream_stop")
+        {
+            if (poser_streaming && incoming_session == poser_session && peer == poser_peer)
+                stop_poser_stream();
+            return;
+        }
         if (type->as_string() == "snapshot_request")
         {
             // Capture only while the live preview is stopped, avoiding an
@@ -290,6 +358,9 @@ struct BlenderLiveLink::Impl
             return;
         }
         if (type->as_string() != "pose") return;
+        // The client must explicitly leave viewer->Blender mode before
+        // switching back to incoming pose preview.
+        if (poser_streaming) return;
         const auto* pose = obj->if_contains("joints");
         if (!pose) return;
         std::unordered_map<std::string, LLQuaternion> incoming;
@@ -338,6 +409,19 @@ struct BlenderLiveLink::Impl
         reply(peer);
     }
 
+    void maybe_stream_poser(LLVOAvatar* avatar)
+    {
+        if (!poser_streaming || active) return;
+        const auto now = Clock::now();
+        if (now - poser_last_subscribe > POSER_STREAM_TIMEOUT)
+        {
+            stop_poser_stream();
+            return;
+        }
+        if (now - poser_last_send < POSER_STREAM_INTERVAL) return;
+        reply_snapshot(poser_peer, avatar, poser_session, true);
+    }
+
     void poll(LLVOAvatar* avatar)
     {
         if (!socket || !socket->is_open()) return;
@@ -373,11 +457,13 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
     if (!gSavedSettings.getBOOL("BSBlenderLiveLinkEnabled"))
     {
         if (link.active) link.restore(avatar);
+        link.stop_poser_stream();
         link.socket.reset();
         return;
     }
     if (!link.open()) return;
     link.poll(avatar);
+    link.maybe_stream_poser(avatar);
     if (!link.active) return;
     if (Clock::now() - link.last_packet > TIMEOUT)
     {
