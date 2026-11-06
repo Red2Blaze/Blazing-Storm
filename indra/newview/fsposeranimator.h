@@ -794,6 +794,14 @@ public:
     /// </remarks>
     void applyJointMirrorToBaseRotations(FSPosingMotion* posingMotion);
 
+    /// Expose the currently running Poser motion to the local-only Blender
+    /// Live Link bridge. This does not create/start a motion and leaves the
+    /// existing internal getPosingMotion() method private.
+    FSPosingMotion* getPosingMotionForLiveLink(LLVOAvatar* avatar) const
+    {
+        return getPosingMotion(avatar);
+    }
+
   private:
     /// <summary>
     /// Translates the supplied rotation vector from UI to a Quaternion for the bone.
