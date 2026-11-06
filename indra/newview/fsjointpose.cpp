@@ -51,6 +51,16 @@ FSJointPose::FSJointPose(LLJoint* joint, U32 usage, bool isCollisionVolume)
     mCurrentState = FSJointState(joint);
 }
 
+void FSJointPose::setLiveLinkTargetRotation(const LLQuaternion& target)
+{
+    mCurrentState.mRotation = target * ~mCurrentState.mBaseRotation;
+}
+
+void FSJointPose::setLiveLinkTargetPosition(const LLVector3& target)
+{
+    mCurrentState.mPosition = target - mCurrentState.mBasePosition;
+}
+
 void FSJointPose::setPublicPosition(const LLVector3& pos)
 {
     addStateToUndo(mCurrentState);
