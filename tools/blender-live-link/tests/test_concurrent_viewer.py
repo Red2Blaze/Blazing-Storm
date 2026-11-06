@@ -26,8 +26,12 @@ class TestConcurrentViewerPosing(unittest.TestCase):
         self.assertIn("joint_pose->getJointModified()", self.source)
 
     def test_poser_stream_uses_its_own_motion_target(self):
-        self.assertIn("user_pose->getTargetRotation()", self.source)
-        self.assertIn("user_pose->getTargetPosition()", self.source)
+        self.assertIn("pose->getTargetRotation()", self.source)
+        self.assertIn("pose->getTargetPosition()", self.source)
+        self.assertIn('message["poser_active"] = poser_active', self.source)
+        self.assertIn('message["edited_count"]', self.source)
+        self.assertIn("motion->currentlyPosingJoint(pose)", self.source)
+        self.assertIn("pose->getJointModified()", self.source)
         self.assertIn('message["type"] = stream ? "poser_frame" : "pose_snapshot"', self.source)
 
     def test_viewer_reads_poser_motion_through_public_api(self):
