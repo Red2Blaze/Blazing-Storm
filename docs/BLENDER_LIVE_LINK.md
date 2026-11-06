@@ -27,6 +27,37 @@ The Blender add-on is maintained separately in **[SL-Blender_LiveLink](https://g
 - **Blender to SL axes** offers Avastar forward conversion (+90 degrees about Z) and alternate yaw presets. If an arm moves along the wrong axis, switch this before rewriting animation keys. Bone rest orientation is also accounted for in v0.2.
 - **Transfer keyed/moved positions** also previews non-pelvis local bone translations. Pelvis translation remains separately opt-in because it can move the avatar unexpectedly.
 
+### Continuous Firestorm Poser → Blender editing (v0.2.6 add-on)
+
+The viewer now accepts an explicit local `poser_stream_start` subscription over the
+same UDP loopback port `127.0.0.1:27779`. It streams only **actively posed,
+user-modified joints on your own avatar** as sequenced `poser_frame` packets.
+The client renews the stream lease about once per second, and the viewer
+expires it after 3.5 seconds without a heartbeat. Unchanged poses are sent
+as occasional heartbeat frames rather than on every viewer render frame.
+
+1. Rebuild the viewer from `feature/blender-live-link-v02`.
+2. From **World > Blazing Storm**, enable Live Link and open **Firestorm
+   Poser (XYZ Axes)**, or enable Live Link directly in Poser's **Settings** tab.
+3. Start posing your own avatar, click Poser's **Visual Manipulators** button
+   to enable the existing red X, green Y, blue Z axes and rotation rings.
+   The **Show Poser Joint Markers** menu option makes joints easier to select.
+4. Install Blender add-on v0.2.6 or newer from the standalone
+   [SL-Blender_LiveLink repository](https://github.com/Red2Blaze/SL-Blender_LiveLink).
+5. Stop any running Blender→viewer preview. In Blender's Blazing sidebar
+   select **Follow Firestorm Poser**, then edit a joint in viewer Poser.
+   The Blender rig previews the latest pose without adding keyframes by default.
+6. Use **Keyframe Current Poser Pose** at the current Blender frame to commit
+   that pose to the animation, or opt in to **Auto-key changed Poser poses**.
+   Export/upload the final animation using Avastar as normal.
+
+The viewer and Blender modes are mutually exclusive to prevent circular pose
+feedback. `poser_stream_stop` or subscription expiry stops sending frames.
+Streamed data remains local-only; no new simulator messages are produced.
+This is a live **pose sampling** bridge, not an editor for an already uploaded
+Second Life animation asset. The custom Blender XYZ mapping still requires
+per-rig visual calibration.
+
 ### Capture a Firestorm Poser pose to Blender keyframes (v0.2)
 
 1. Enable Live Link in your viewer from **World > Blazing Storm**. Open **Firestorm Poser...** there and use Poser to move the avatar.
