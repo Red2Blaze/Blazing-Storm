@@ -26,6 +26,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 namespace
@@ -162,10 +163,64 @@ struct BlenderLiveLink::Impl
     std::string last_poser_payload;
     std::uint64_t poser_stream_sequence = 0;
 
-    // A modified Firestorm Poser joint takes precedence over incoming
-    // Blender pose data for that *joint only*. All other joints still follow
-    // Blender. Query the Poser motion, not the rendered skeleton, so the
-    // final Blender override never feeds back into Poser stream packets.
+    // Authority is negotiated per joint. Poser takes control only when its
+    // actual target changes; Blender takes it back with a higher edit revision.
+    // Neither the persistent Poser modified flag nor preview refresh is an edit.
+    struct PoserTarget
+    {
+        LLQuaternion rotation;
+        LLVector3 position;
+    };
+    std::unordered_map<std::string, PoserTarget> last_poser_targets;
+    std::unordered_map<std::string, std::uint64_t> blender_edit_revisions;
+    std::unordered_set<std::string> blender_owned;
+
+    void observe_poser_edits(LLVOAvatar* avatar)
+    {
+        static FSPoserAnimator poser;
+        FSPosingMotion* motion = poser.getPosingMotionForLiveLink(avatar);
+        std::unordered_set<std::string> currently_edited;
+        if (motion && !motion->isStopped())
+        {
+            for (S32 i = 0; i < static_cast<S32>(MAX_JOINTS); ++i)
+            {
+                LLJoint* joint = avatar->getCharacterJoint(i);
+                if (!joint) break;
+                const std::string& name = joint->getName();
+                if (name.size() < 2 || name[0] != 'm') continue;
+                FSJointPose* pose = motion->getJointPoseByJointName(name);
+                if (!pose || !motion->currentlyPosingJoint(pose)
+                    || !pose->getJointModified()) continue;
+                currently_edited.insert(name);
+                const PoserTarget current{pose->getTargetRotation(), pose->getTargetPosition()};
+                const auto previous = last_poser_targets.find(name);
+                bool changed = previous == last_poser_targets.end();
+                if (!changed)
+                {
+                    float dot = 0.f;
+                    for (int j = 0; j < 4; ++j)
+                        dot += previous->second.rotation.mQ[j] * current.rotation.mQ[j];
+                    changed = std::abs(std::abs(dot) - 1.f) > 0.00001f
+                        || (current.position - previous->second.position).lengthSquared() > 0.00000001f;
+                }
+                if (changed)
+                {
+                    blender_owned.erase(name);
+                    last_poser_targets[name] = current;
+                }
+            }
+        }
+        for (auto it = last_poser_targets.begin(); it != last_poser_targets.end();)
+        {
+            if (currently_edited.count(it->first) == 0)
+                it = last_poser_targets.erase(it);
+            else ++it;
+        }
+    }
+
+    // Read the Poser motion target rather than the rendered skeleton (which
+    // already contains Blender's preview). Do not treat getJointModified()
+    // alone as permanently locking a bone.
     bool poser_controls_joint(LLVOAvatar* avatar, const std::string& name) const
     {
         static FSPoserAnimator poser;
@@ -173,7 +228,8 @@ struct BlenderLiveLink::Impl
         if (!motion || motion->isStopped()) return false;
         FSJointPose* joint_pose = motion->getJointPoseByJointName(name);
         return joint_pose && motion->currentlyPosingJoint(joint_pose)
-            && joint_pose->getJointModified();
+            && joint_pose->getJointModified()
+            && blender_owned.count(name) == 0;
     }
 
     void stop_poser_stream()
@@ -250,6 +306,8 @@ struct BlenderLiveLink::Impl
         has_pelvis = false;
         session.clear();
         sequence = 0;
+        blender_owned.clear();
+        blender_edit_revisions.clear();
     }
 
     void reply(const udp::endpoint& peer)
@@ -296,6 +354,8 @@ struct BlenderLiveLink::Impl
                 // but unmodified ones must continue playing Blender tracks.
                 if (!pose->getJointModified()) continue;
                 ++edited_joint_count;
+                // Do not echo a joint which Blender has subsequently edited.
+                if (blender_owned.count(name) != 0) continue;
                 const LLQuaternion rotation = pose->getTargetRotation();
                 joints[name] = json::array{double(rotation.mQ[VW]),
                     double(rotation.mQ[VX]), double(rotation.mQ[VY]),
@@ -360,10 +420,8 @@ struct BlenderLiveLink::Impl
         if (!sequence_from_json(*seq, incoming_seq)) return;
         if (type->as_string() == "poser_stream_start")
         {
-            // Keep one-way streams logically independent, so Blender can
-            // preview an animation *while* Firestorm Poser edits some joints.
-            // Modified Poser joints take priority in apply(); each client
-            // listens on its own ephemeral loopback UDP port.
+            // Streams stay independent, with edit-based per-joint handoff.
+            // Each client listens on its own ephemeral loopback UDP port.
             if (!poser_streaming || incoming_session != poser_session || peer != poser_peer)
             {
                 poser_stream_sequence = 0;
@@ -411,6 +469,33 @@ struct BlenderLiveLink::Impl
         // Prevent stale UDP packets from rolling the avatar backwards.
         if (active && session == incoming_session && incoming_seq <= sequence) return;
         if (active && session != incoming_session) restore(avatar);
+        // A revision number denotes a *new local Blender edit*. Repeated
+        // packets/heartbeats with the same number never steal Poser ownership.
+        // Parse and validate the entire optional map before changing authority.
+        std::unordered_map<std::string, std::uint64_t> edits;
+        if (const auto* edit_value = obj->if_contains("blender_edits"))
+        {
+            const auto* edit_object = edit_value->if_object();
+            if (!edit_object || edit_object->size() > MAX_JOINTS) return;
+            for (const auto& entry : *edit_object)
+            {
+                const std::string name(entry.key().data(), entry.key().size());
+                std::uint64_t revision = 0;
+                if (name.size() < 2 || name.size() > 80 || name[0] != 'm'
+                    || incoming.find(name) == incoming.end()
+                    || !sequence_from_json(entry.value(), revision) || revision == 0) return;
+                edits.emplace(name, revision);
+            }
+        }
+        for (const auto& entry : edits)
+        {
+            const auto found = blender_edit_revisions.find(entry.first);
+            if (found == blender_edit_revisions.end() || entry.second > found->second)
+            {
+                blender_edit_revisions[entry.first] = entry.second;
+                blender_owned.insert(entry.first);
+            }
+        }
         // Release any bones removed by the new packet.
         for (auto it = previous_rotations.begin(); it != previous_rotations.end();)
         {
@@ -511,6 +596,7 @@ void BlenderLiveLink::apply(LLVOAvatar* avatar)
         return;
     }
     if (!link.open()) return;
+    link.observe_poser_edits(avatar);
     link.poll(avatar);
     link.maybe_stream_poser(avatar);
     if (!link.active) return;
