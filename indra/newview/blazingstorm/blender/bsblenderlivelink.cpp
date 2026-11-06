@@ -169,7 +169,7 @@ struct BlenderLiveLink::Impl
     bool poser_controls_joint(LLVOAvatar* avatar, const std::string& name) const
     {
         static FSPoserAnimator poser;
-        FSPosingMotion* motion = poser.getPosingMotion(avatar);
+        FSPosingMotion* motion = poser.getPosingMotionForLiveLink(avatar);
         if (!motion || motion->isStopped()) return false;
         FSJointPose* joint_pose = motion->getJointPoseByJointName(name);
         return joint_pose && motion->currentlyPosingJoint(joint_pose)
@@ -286,7 +286,7 @@ struct BlenderLiveLink::Impl
                 || !poser.hasJointBeenChanged(avatar, *poser_joint)) continue;
             // Export the Poser's own target, never the last rotation applied
             // by Blender's local preview (which is a rendering override).
-            FSPosingMotion* posing_motion = poser.getPosingMotion(avatar);
+            FSPosingMotion* posing_motion = poser.getPosingMotionForLiveLink(avatar);
             FSJointPose* user_pose = posing_motion
                 ? posing_motion->getJointPoseByJointName(name) : nullptr;
             if (!user_pose) continue;
