@@ -49,8 +49,18 @@ class TestConcurrentViewerPosing(unittest.TestCase):
         self.assertGreaterEqual(bridge, 0)
         self.assertGreater(private, bridge)
         self.assertEqual(
-            self.source.count("poser.getPosingMotionForLiveLink(avatar)"), 3)
+            self.source.count("poser.getPosingMotionForLiveLink(avatar)"), 5)
         self.assertNotIn("poser.getPosingMotion(avatar)", self.source)
+
+    def test_blender_handoff_rebases_poser_without_generating_user_edits(self):
+        self.assertIn("setLiveLinkTargetRotation", self.source)
+        self.assertIn("setLiveLinkTargetPosition", self.source)
+        self.assertIn("restore_poser_targets(avatar)", self.source)
+        self.assertIn("original_poser_targets.erase(name)", self.source)
+        pose_cpp = (VIEWER.parents[2] / "fsjointpose.cpp").read_text(encoding="utf-8")
+        silent_rotation = pose_cpp.split("void FSJointPose::setLiveLinkTargetRotation")[1].split("void FSJointPose::setLiveLinkTargetPosition")[0]
+        self.assertNotIn("addStateToUndo", silent_rotation)
+        self.assertIn("mCurrentState.mRotation", silent_rotation)
 
     def test_stream_subscription_expires_and_never_opens_public_listener(self):
         self.assertIn("POSER_STREAM_TIMEOUT", self.source)
