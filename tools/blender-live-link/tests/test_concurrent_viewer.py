@@ -7,6 +7,7 @@ from pathlib import Path
 import unittest
 
 VIEWER = Path(__file__).resolve().parents[3] / "indra/newview/blazingstorm/blender/bsblenderlivelink.cpp"
+POSER_HEADER = Path(__file__).resolve().parents[3] / "indra/newview/fsposeranimator.h"
 
 
 class TestConcurrentViewerPosing(unittest.TestCase):
@@ -28,6 +29,18 @@ class TestConcurrentViewerPosing(unittest.TestCase):
         self.assertIn("user_pose->getTargetRotation()", self.source)
         self.assertIn("user_pose->getTargetPosition()", self.source)
         self.assertIn('message["type"] = stream ? "poser_frame" : "pose_snapshot"', self.source)
+
+    def test_viewer_reads_poser_motion_through_public_api(self):
+        # The original receiver directly called FSPoserAnimator's private
+        # getPosingMotion(), which fails MSVC with C2248.
+        header = POSER_HEADER.read_text(encoding="utf-8")
+        bridge = header.find("getPosingMotionForLiveLink(LLVOAvatar* avatar) const")
+        private = header.find("  private:", bridge)
+        self.assertGreaterEqual(bridge, 0)
+        self.assertGreater(private, bridge)
+        self.assertEqual(
+            self.source.count("poser.getPosingMotionForLiveLink(avatar)"), 2)
+        self.assertNotIn("poser.getPosingMotion(avatar)", self.source)
 
     def test_stream_subscription_expires_and_never_opens_public_listener(self):
         self.assertIn("POSER_STREAM_TIMEOUT", self.source)
