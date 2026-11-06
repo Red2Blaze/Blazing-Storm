@@ -27,6 +27,33 @@ The Blender add-on is maintained separately in **[SL-Blender_LiveLink](https://g
 - **Blender to SL axes** offers Avastar forward conversion (+90 degrees about Z) and alternate yaw presets. If an arm moves along the wrong axis, switch this before rewriting animation keys. Bone rest orientation is also accounted for in v0.2.
 - **Transfer keyed/moved positions** also previews non-pelvis local bone translations. Pelvis translation remains separately opt-in because it can move the avatar unexpectedly.
 
+### Simultaneous animation preview + Firestorm Poser edits (v0.2.8 add-on)
+
+The previous implementation **intentionally rejected** incoming Poser stream
+subscriptions while a Blender→viewer preview was active and disabled
+**Follow Firestorm Poser** on the Blender side. That is now changed. The two
+loopback sessions can run at once, with **per-joint ownership**:
+
+- Blender previews all requested animation joints **except those actively
+  edited in Firestorm Poser**; Poser overrides only the modified joints.
+- The viewer sends its **Poser motion target rotations**, not the joint's
+  last rendered value after Blender's preview. This prevents the echoed
+  Blender pose from being mistaken for a new Poser edit.
+- The Blender add-on v0.2.8 starts following Poser automatically when
+  **Sync Firestorm Poser edits simultaneously** is enabled (default).
+  The user can still start or stop Poser following independently.
+- The Blender sender excludes joints owned by its Poser follower so those
+  edits cannot ping-pong between the two processes. Releasing a Poser
+  joint returns control to the Blender animation.
+- Keyframe writes remain manual unless the user explicitly enables
+  **Auto-key changed Poser poses**.
+
+**Required:** rebuild the viewer from this branch and install the v0.2.8
+ZIP from [SL-Blender_LiveLink](https://github.com/Red2Blaze/SL-Blender_LiveLink).
+Just pulling the source is insufficient. Test a single head joint first
+while the rest of an animation is running. This feature is local-only
+and needs joint/IK/attachment runtime validation.
+
 ### Continuous Firestorm Poser → Blender editing (v0.2.6 add-on)
 
 The viewer now accepts an explicit local `poser_stream_start` subscription over the
