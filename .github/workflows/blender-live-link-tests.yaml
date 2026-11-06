@@ -3,7 +3,7 @@ name: Viewer Live Link regression
 on:
   pull_request:
     paths:
-      - "tools/blender-live-link/tests/test_manifest_outputs.py"
+      - "tools/blender-live-link/tests/**"
       - "indra/newview/viewer_manifest.py"
       - "indra/newview/blazingstorm/blender/**"
       - ".github/workflows/blender-live-link-tests.yaml"
@@ -17,5 +17,5 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - name: Test viewer manifest GitHub output integration
-        run: python -m unittest discover -s tools/blender-live-link/tests -p "test_manifest_outputs.py" -v
+      - name: Test viewer manifest and concurrent Poser bridge
+        run: python -m unittest discover -s tools/blender-live-link/tests -p "test_*.py" -v
