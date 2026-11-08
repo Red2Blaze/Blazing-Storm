@@ -53,15 +53,26 @@ FSJointPose::FSJointPose(LLJoint* joint, U32 usage, bool isCollisionVolume)
 
 void FSJointPose::setLiveLinkTargetRotation(const LLQuaternion& target)
 {
-    // Do not trigger refreshes for unchanged stream heartbeats.
-    if (mCurrentState.getTargetRotation() == target) return;
+    // Ignore float round-off from reconstructing target from base * delta.
+    // A quaternion and its negation describe the same pose.
+    const LLQuaternion previous = mCurrentState.getTargetRotation();
+    F32 difference = 0.f;
+    F32 opposite = 0.f;
+    for (S32 i = 0; i < 4; ++i)
+    {
+        const F32 a = previous.mQ[i] - target.mQ[i];
+        const F32 b = previous.mQ[i] + target.mQ[i];
+        difference += a * a;
+        opposite += b * b;
+    }
+    if (difference < 0.00000001f || opposite < 0.00000001f) return;
     mCurrentState.setLiveLinkTargetRotation(target);
     ++mLiveLinkTargetRevision;
 }
 
 void FSJointPose::setLiveLinkTargetPosition(const LLVector3& target)
 {
-    if (mCurrentState.getTargetPosition() == target) return;
+    if ((mCurrentState.getTargetPosition() - target).lengthSquared() < 0.00000001f) return;
     mCurrentState.setLiveLinkTargetPosition(target);
     ++mLiveLinkTargetRevision;
 }
