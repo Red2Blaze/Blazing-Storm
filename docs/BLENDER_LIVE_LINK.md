@@ -62,6 +62,29 @@ that edited count increases after moving a joint, and that the bone name
 exists in the selected Avastar deform armature. Per-bone axis mapping
 affects the direction but not whether a joint arrives.
 
+### Poser slider/trackpad refresh and body-part axis groups (v0.2.13)
+
+Poser's control widgets formerly only refreshed when someone moved a Poser
+slider or selected another bone. Live Link now counts **silent remote target
+changes** per joint and refreshes the selected joint's rotation sliders,
+position spinners and trackpad readout in the visible Poser floater. No
+synthetic user edit/undo entry is generated. Quaternion roundoff does not
+trigger an endless widget refresh.
+
+The standalone Blender add-on v0.2.13 adds nine **Body-part axes** groups:
+spine/pelvis, head/neck, L/R arms, L/R hands/fingers, L/R legs/feet, and
+face/eyes. The order is individual per-bone override > enabled body region
+> global axes. Regions are prepared automatically on Start Live Link and
+initially inherit the global mapping. Users enable and tune a group once,
+without modifying previously calibrated explicit bone overrides. The
+included Firestorm Poser yaw/pitch/roll hints are **not** automatically
+converted into Blender's 3D basis; no unvalidated bone-sign presets are imposed.
+
+Validation: test changing Head in Blender and observing Poser's slider values,
+then modifying it in Poser and switching back again. Repeat for a left and
+right arm/hand with independent group settings. A C++ build, live Avastar
+rig test and add-on test package are required to confirm runtime behavior.
+
 ### Same-joint bidirectional handoff (v0.2.12 add-on)
 
 The current implementation uses **last edited joint wins** rather than a
