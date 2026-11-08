@@ -73,6 +73,24 @@ class TestConcurrentViewerPosing(unittest.TestCase):
         self.assertIn("mRotation.set(target * ~mBaseRotation)", pose_header)
         self.assertIn("mPosition.set(target - mBasePosition)", pose_header)
 
+    def test_live_link_updates_visible_poser_sliders_without_user_commits(self):
+        poser = (VIEWER.parents[2] / "fsfloaterposer.cpp").read_text(encoding="utf-8")
+        poser_h = (VIEWER.parents[2] / "fsfloaterposer.h").read_text(encoding="utf-8")
+        joint_h = (VIEWER.parents[2] / "fsjointpose.h").read_text(encoding="utf-8")
+        joint_cpp = (VIEWER.parents[2] / "fsjointpose.cpp").read_text(encoding="utf-8")
+        draw = poser.split("void FSFloaterPoser::draw()", 1)[1].split(
+            "void FSFloaterPoser::markSelectedJointsToHighlight", 1)[0]
+        self.assertIn("getLiveLinkTargetRevision()", draw)
+        self.assertIn("refreshRotationSlidersAndSpinners()", draw)
+        self.assertIn("refreshPositionSlidersAndSpinners()", draw)
+        self.assertIn("refreshTrackpadCursor()", draw)
+        self.assertNotIn("onYawPitchRollChanged(", draw)
+        self.assertNotIn("setJointRotation(", draw)
+        self.assertIn("mLastLiveLinkRevision", poser_h)
+        self.assertIn("mLiveLinkTargetRevision", joint_h)
+        self.assertIn("++mLiveLinkTargetRevision", joint_cpp)
+        self.assertIn("difference < 0.00000001f", joint_cpp)
+
     def test_stream_subscription_expires_and_never_opens_public_listener(self):
         self.assertIn("POSER_STREAM_TIMEOUT", self.source)
         self.assertIn("poser_last_subscribe", self.source)
