@@ -41,6 +41,7 @@ class LLScrollListCtrl;
 class LLSliderCtrl;
 class LLTabContainer;
 class FSLoadPoseTimer;
+class FSJointPose;
 
 /// <summary>
 /// Describes how to load a pose file.
@@ -493,6 +494,10 @@ public:
     LLToolset* mLastToolset{ nullptr };
     LLTool*    mJointRotTool{ nullptr };
 
+    // Poser UI refreshes only after an externally injected Live Link target
+    // changes. Do not create commits or rewrite the local Poser undo history.
+    const FSJointPose* mLastLiveLinkPose{ nullptr };
+    U64 mLastLiveLinkRevision{ 0 };
     LLVector3 mLastSliderRotation;
     FSPoserAnimator::FSPoserJoint* mLastSelectedJoint{ nullptr };
     U64                            timeFadeStartedMicrosec;

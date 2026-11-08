@@ -1,35 +1,185 @@
-# Blazing Storm — Blender Live Link (experimental v0.1)
+# Blazing Storm — Blender Live Link (experimental v0.2)
 
 Local-only pose preview bridge. Intended for **Blender 5.2 + Avastar** first;
-a separate Blender 3.6 installable add-on is built from the same Python source.
+the installable Blender 5.2/3.6 add-ons are maintained in a separate repository.
 
 ## Installation
 
-1. Check out the `feature/blender-live-link` branch of `Red2Blaze/Blazing-Storm` and rebuild the viewer with its existing Windows build setup.
-2. Open the rebuilt viewer, log in, then enable `BSBlenderLiveLinkEnabled` in **Advanced > Show Debug Settings** / Debug Settings search. It's **off by default**.
+1. Check out the `feature/blender-live-link-v02` branch of `Red2Blaze/Blazing-Storm` and rebuild the viewer with its existing Windows build setup.
+2. Open the rebuilt viewer, log in, then use **World > Blazing Storm > Enable Blender Live Link**. The underlying `BSBlenderLiveLinkEnabled` Debug Setting remains available and defaults to **off**.
 3. In Blender 5.2, use `Edit > Preferences > Get Extensions/Add-ons > Install from Disk` (the exact label depends on Blender install) and select `blazing_live_link_blender_5_2.zip`; enable the add-on.
-4. Open an Avastar character with a deform rig. In the 3D View's `N` sidebar, go to **Blazing > Blazing Storm Live Link**, select the **armature** (the object that contains `mPelvis`, `mHead`, etc.), and press **Start Live Link**.
+4. Open an Avastar character with a deform rig. In the 3D View's `N` sidebar, go to **Blazing > Blazing Storm Live Link**, choose the **armature** (containing `mPelvis`, `mHead`, etc.). Choose **Keyframed + selected** and **Avastar (-Y to SL +X)** to start, then press **Start Live Link**.
 5. Check for **Viewer connected**. If it stays at **Waiting for viewer**, check whether the viewer was rebuilt with the patch, the Debug Setting is enabled, and UDP port `127.0.0.1:27779` is available.
-6. Scrub or play Blender's timeline. The viewer draws pose updates on **your own avatar only**. Press Stop Live Link, uncheck the viewer setting, or close Blender to release the pose (the receiver also times out after ~1.5 s).
+6. Scrub or play Blender's timeline, or edit a selected bone in Pose Mode. The viewer draws pose updates on **your own avatar only**. Press Stop Live Link, uncheck the viewer setting, or close Blender to release the pose (the receiver also times out after ~1.5 s).
 
 The 3.6 add-on zip is `blazing_live_link_blender_3_6.zip`. It uses the same wire protocol and receiver, so a different viewer build is not needed.
 
-Both installers can be generated from one source tree with:
+The Blender add-on is maintained separately in **[SL-Blender_LiveLink](https://github.com/Red2Blaze/SL-Blender_LiveLink)**. Download a verified `blazing_live_link_blender_5_2.zip` or `blazing_live_link_blender_3_6.zip` from its **Releases** page. New add-on versions are packaged by its own GitHub Actions workflow. The viewer repository contains only the receiver/menus and viewer-specific regression tests.
 
-```bash
-python tools/blender-live-link/package_addons.py
-```
+**If Blender reports `cannot import name 'parse_snapshot'`:** close Blender, remove the old `blazing_live_link` add-on folder, and reinstall the full ZIP from the standalone repository. This means Blender still has an older `protocol.py` beside its updated add-on entry point.
 
-This creates `tools/blender-live-link/dist/blazing_live_link_blender_5_2.zip` and `blazing_live_link_blender_3_6.zip`. The script adjusts the add-on's minimum Blender version for each build; the viewer protocol remains identical. These are classic Python add-on ZIPs, not new-style Blender Extensions manifests.
+### Selective animation preview (v0.2)
+
+- **Keyframed + selected** (default): transfer only bones with keyframes in the current action, bones selected in Blender Pose Mode, and moved deform bones affected by selected/keyframed non-deform controls. Other SL avatar joints can keep their existing AO/idle animation.
+- **Keyframed only**: helpful to test the actual deform-bone tracks expected in an uploaded animation, but IK controls that are not baked into deform-bone animation will **not** export the same way.
+- **All moved bones**: transfer every evaluated deform bone away from rest, including static unkeyed pose components.
+- **Entire rig**: v0.1-style full skeleton override.
+- **Blender to SL axes** offers Avastar forward conversion (+90 degrees about Z) and alternate yaw presets. If an arm moves along the wrong axis, switch this before rewriting animation keys. Bone rest orientation is also accounted for in v0.2.
+- **Transfer keyed/moved positions** also previews non-pelvis local bone translations. Pelvis translation remains separately opt-in because it can move the avatar unexpectedly.
+
+### Diagnosing Firestorm Poser edits not appearing in Blender (v0.2.10)
+
+The viewer now samples joints directly from the **currently active Firestorm
+Poser motion**, rather than cross-checking against a separate list of Poser
+joint definitions. The loopback `poser_frame` payload includes three
+optional diagnostics:
+
+- `poser_active` — whether the avatar's Poser motion is active
+- `posed_count` — joints currently controlled by that motion
+- `edited_count` — joints explicitly edited by Poser this session
+
+The Blender add-on v0.2.10 displays connected/active/edited-joint and
+matching Blender-bone counts. It also reapplies the last received Poser edit
+while Blender reevaluates its animation; previously it applied only on new
+network frames, so the animation could immediately overwrite the adjustment.
+
+For a **Blender animation → Firestorm minor corrections** workflow, first
+start Blender preview and move the timeline to the pose you want to edit,
+then start posing in Firestorm Poser (to initialize its base pose), enable
+the visual XYZ manipulator and move an arm/head joint. Follow mode in Blender
+receives only the joints actually changed by Poser; other animated bones
+remain controlled by Blender.
+
+For an **entire pose made inside Firestorm**, start Firestorm Poser without
+a Blender preview and click **Follow Firestorm Poser** in Blender. Use
+**Keyframe Current Poser Pose** when you want to record edited joints into
+the current Blender frame. This does not directly modify existing uploaded
+Second Life animations.
+
+**Requires the latest viewer build plus add-on v0.2.10.** Debugging order:
+check that Blender reports the Poser stream connected, that Poser is active,
+that edited count increases after moving a joint, and that the bone name
+exists in the selected Avastar deform armature. Per-bone axis mapping
+affects the direction but not whether a joint arrives.
+
+### Poser slider/trackpad refresh and body-part axis groups (v0.2.13)
+
+Poser's control widgets formerly only refreshed when someone moved a Poser
+slider or selected another bone. Live Link now counts **silent remote target
+changes** per joint and refreshes the selected joint's rotation sliders,
+position spinners and trackpad readout in the visible Poser floater. No
+synthetic user edit/undo entry is generated. Quaternion roundoff does not
+trigger an endless widget refresh.
+
+The standalone Blender add-on v0.2.13 adds nine **Body-part axes** groups:
+spine/pelvis, head/neck, L/R arms, L/R hands/fingers, L/R legs/feet, and
+face/eyes. The order is individual per-bone override > enabled body region
+> global axes. Regions are prepared automatically on Start Live Link and
+initially inherit the global mapping. Users enable and tune a group once,
+without modifying previously calibrated explicit bone overrides. The
+included Firestorm Poser yaw/pitch/roll hints are **not** automatically
+converted into Blender's 3D basis; no unvalidated bone-sign presets are imposed.
+
+Validation: test changing Head in Blender and observing Poser's slider values,
+then modifying it in Poser and switching back again. Repeat for a left and
+right arm/hand with independent group settings. A C++ build, live Avastar
+rig test and add-on test package are required to confirm runtime behavior.
+
+### Same-joint bidirectional handoff (v0.2.12 add-on)
+
+The current implementation uses **last edited joint wins** rather than a
+permanent Poser priority. When Blender modifies an Avastar control after a
+Poser edit, Blender sends a monotonically increasing `blender_edits` revision
+for the matching deform joint. The viewer marks that joint Blender-owned
+until its actual Poser motion target changes again. A repeating frame or
+heartbeat has no ownership effect. The viewer omits Blender-owned joints
+from its Poser stream, allowing the add-on to acknowledge handoff and avoid
+echoing the previously received Pose target.
+
+To verify, move Head in Blender, move mHead in Firestorm Poser, move Head
+again in Blender, then move mHead again in Firestorm Poser. Both programs
+should follow each change in sequence without stopping Live Link. Rebuild
+the viewer **and** reinstall Blender add-on v0.2.12 for this protocol update.
+Avastar constraints/IK and concurrent manipulations still need in-world tests.
+
+### Simultaneous animation preview + Firestorm Poser edits (v0.2.8 add-on)
+
+The previous implementation **intentionally rejected** incoming Poser stream
+subscriptions while a Blender→viewer preview was active and disabled
+**Follow Firestorm Poser** on the Blender side. That is now changed. The two
+loopback sessions can run at once, with **per-joint ownership**:
+
+- Blender previews all requested animation joints **except those currently
+  owned by Firestorm Poser**; ownership now changes with each actual edit.
+- The viewer sends its **Poser motion target rotations**, not the joint's
+  last rendered value after Blender's preview. This prevents the echoed
+  Blender pose from being mistaken for a new Poser edit.
+- The Blender add-on v0.2.8 starts following Poser automatically when
+  **Sync Firestorm Poser edits simultaneously** is enabled (default).
+  The user can still start or stop Poser following independently.
+- The Blender sender excludes joints owned by its Poser follower so those
+  edits cannot ping-pong between the two processes. Releasing a Poser
+  joint returns control to the Blender animation.
+- Keyframe writes remain manual unless the user explicitly enables
+  **Auto-key changed Poser poses**.
+
+**Required for latest bidirectional handoff:** rebuild the viewer and install the v0.2.12
+ZIP from [SL-Blender_LiveLink](https://github.com/Red2Blaze/SL-Blender_LiveLink).
+Just pulling the source is insufficient. Test a single head joint first
+while the rest of an animation is running. This feature is local-only
+and needs joint/IK/attachment runtime validation.
+
+### Continuous Firestorm Poser → Blender editing (v0.2.6 add-on)
+
+The viewer now accepts an explicit local `poser_stream_start` subscription over the
+same UDP loopback port `127.0.0.1:27779`. It streams only **actively posed,
+user-modified joints on your own avatar** as sequenced `poser_frame` packets.
+The client renews the stream lease about once per second, and the viewer
+expires it after 3.5 seconds without a heartbeat. Unchanged poses are sent
+as occasional heartbeat frames rather than on every viewer render frame.
+
+1. Rebuild the viewer from `feature/blender-live-link-v02`.
+2. From **World > Blazing Storm**, enable Live Link and open **Firestorm
+   Poser (XYZ Axes)**, or enable Live Link directly in Poser's **Settings** tab.
+3. Start posing your own avatar, click Poser's **Visual Manipulators** button
+   to enable the existing red X, green Y, blue Z axes and rotation rings.
+   The **Show Poser Joint Markers** menu option makes joints easier to select.
+4. Install Blender add-on v0.2.6 or newer from the standalone
+   [SL-Blender_LiveLink repository](https://github.com/Red2Blaze/SL-Blender_LiveLink).
+5. Stop any running Blender→viewer preview. In Blender's Blazing sidebar
+   select **Follow Firestorm Poser**, then edit a joint in viewer Poser.
+   The Blender rig previews the latest pose without adding keyframes by default.
+6. Use **Keyframe Current Poser Pose** at the current Blender frame to commit
+   that pose to the animation, or opt in to **Auto-key changed Poser poses**.
+   Export/upload the final animation using Avastar as normal.
+
+The viewer and Blender modes are mutually exclusive to prevent circular pose
+feedback. `poser_stream_stop` or subscription expiry stops sending frames.
+Streamed data remains local-only; no new simulator messages are produced.
+This is a live **pose sampling** bridge, not an editor for an already uploaded
+Second Life animation asset. The custom Blender XYZ mapping still requires
+per-rig visual calibration.
+
+### Capture a Firestorm Poser pose to Blender keyframes (v0.2)
+
+1. Enable Live Link in your viewer from **World > Blazing Storm**. Open **Firestorm Poser...** there and use Poser to move the avatar.
+2. In Blender, select the corresponding Avastar armature and go to the frame on which you want the pose keyframed.
+3. **Stop Live Link** in Blender; capture deliberately will not reflect Blender's own preview back at it.
+4. Select the deform bones to keyframe (or uncheck **Capture selected bones only** to import all *user-modified, actively posed Firestorm Poser joints*).
+5. Click **Capture Viewer Pose to Keyframes** in the Blazing panel. The viewer replies locally and Blender inserts quaternion rotation keys on that frame.
+6. Optional **Capture Poser translations (experimental)** imports matching position offsets. Leave this off for the first test: avatar appearance adjustments can affect position baselines.
+7. Advance Blender to another frame, change the pose in Firestorm Poser, and capture again to build an animation.
+
+Capture is *not* a continuous bidirectional link, and it is not a viewer-side animation recorder. It samples the Firestorm Poser joints that have actually been modified in the current Poser session; other AO and walking motions are not intentionally imported. The viewer never uploads or creates SL animation inventory items. Review and bake your keys with Blender/Avastar's usual exporter before upload.
 
 ### Development mode and limitations
 
-- **Experimental / not visually validated.** The Blender add-on samples evaluated Avastar `m*` deform joints, including IK constraint results, and computes rotations relative to their bind/rest transforms. Bone-axis mapping from Blender's rig to the Second Life avatar skeleton **must be checked in a running viewer**. An X/Y/Z movement may need calibration before the feature is usable for production.
-- The viewer applies rotations directly to local joints *after the usual `updateCharacter()` call*. It is a local rendering override, not a native animation asset or a new motion controller. Existing animation and AO blending, attachment placement, rigged mesh skinning, and collision may need integration adjustments after a live test.
-- `mPelvis` translation is disabled by default because coordinate/bind calibration is needed. Leave it off initially.
+- **Experimental / not fully visually validated.** The Blender add-on samples evaluated Avastar `m*` deform joints, including IK constraint results, and maps rotations from the rest/parent frame into Second Life axes using a configurable preset. Specific rigs or joints may still require axis calibration; check a wrist and neck on all three axes before treating the preview as upload-accurate.
+- The viewer applies transforms **inside** `updateCharacter()` after motion blending but before updating the head offset and joint world matrices. This should make regular rigged attachments and linked eyes follow more reliably. Independently animated attachments (including Animesh or scripted eye animations) are **not** guaranteed to be controlled by Live Link.
+- `mPelvis` translation is disabled by default because coordinate/bind calibration is needed. Leave it off initially; other keyed/selected local joint translations are supported.
 - One incoming Blender session drives the viewer at a time; a new valid sender takes over.
 - The initial viewer opt-in is a Debug Setting, not a polished floater. There is no in-viewer recording/export, nor bidirectional timeline control. Blender is authoritative.
-- No Blender, Avastar, or full viewer runtime is installed in the packaging environment. Only protocol unit tests and Python static compilation have been run. **Viewer build and actual pose behavior remain unverified.**
+- The v0.1 preview was user-tested and found to work partially; v0.2 coordinate conversion, selected-bone behavior, attachment timing and Poser keyframe capture still require real Blender + Avastar + viewer testing.
 
 ### Safety
 
@@ -41,8 +191,8 @@ This creates `tools/blender-live-link/dist/blazing_live_link_blender_5_2.zip` an
 ### Build this feature branch
 
 ```bash
-git fetch origin feature/blender-live-link
-git switch feature/blender-live-link
+git fetch origin feature/blender-live-link-v02
+git switch feature/blender-live-link-v02
 ```
 
 Run the viewer's normal Windows CMake/autobuild configuration and build. A full viewer build and actual Blender/Avastar integration are not yet validated.
@@ -55,7 +205,7 @@ Viewer receives UDP JSON at `127.0.0.1:27779`:
 {"protocol":"bs-blender-live-link","version":1,"type":"pose","session":"00000000000000000000000000000000","seq":1,"frame":1,"fps":30.0,"joints":{"mHead":[1.0,0.0,0.0,0.0]}}
 ```
 
-Quaternions use `[w,x,y,z]`; viewer converts to `LLQuaternion(x,y,z,w)`. The sender is responsible for translating Avastar's evaluated rest-relative bone rotations into the viewer skeleton's expected local joint space. Optional `pelvis` is `[x,y,z]`. A `stop` packet releases the current session. The viewer acknowledges valid poses to the sending UDP port; the add-on shows **Viewer connected** only when it receives such acknowledgement.
+Quaternions use `[w,x,y,z]`; viewer converts to `LLQuaternion(x,y,z,w)`. The sender is responsible for translating Avastar's evaluated rest-relative bone rotations into the viewer skeleton's expected local joint space. Optional `pelvis` is `[x,y,z]`. A `stop` packet releases the current session. The viewer acknowledges valid poses to the sending UDP port; the add-on shows **Viewer connected** only when it receives such acknowledgement. v0.2 adds an optional `positions` mapping of per-joint local offsets `[x,y,z]` to `pose` packets, a `snapshot_request` packet, and a viewer `pose_snapshot` reply containing actively edited Firestorm Poser joints. Version stays 1 for compatibility with older pose-only viewers, although an older viewer does not support snapshot replies.
 
 ## Validation checklist
 
@@ -71,4 +221,4 @@ Quaternions use `[w,x,y,z]`; viewer converts to `LLQuaternion(x,y,z,w)`. The sen
 
 ## Repository workflow
 
-This feature is developed on `feature/blender-live-link` using the `Red2Blaze` GitHub account. Org Organizer account separation does not apply to this viewer project.
+This feature is developed on `feature/blender-live-link-v02` using the `Red2Blaze` GitHub account. Org Organizer account separation does not apply to this viewer project.

@@ -263,8 +263,18 @@ class FSJointPose
     /// </summary>
     void revertJoint();
 
+    // Generation changes only for remote Live Link updates, not Poser UI edits.
+    U64 getLiveLinkTargetRevision() const { return mLiveLinkTargetRevision; }
+
     LLQuaternion getTargetRotation() const { return mCurrentState.getTargetRotation(); }
     LLVector3    getTargetPosition() const { return mCurrentState.getTargetPosition(); }
+
+    // Silent Live Link baseline updates. These are remote Blender previews,
+    // not user Poser edits: do not mark modified or add to Poser's undo stack.
+    // Keep the public delta in sync so the next manual Poser movement starts
+    // from the current Blender pose rather than snapping to an old target.
+    void setLiveLinkTargetRotation(const LLQuaternion& target);
+    void setLiveLinkTargetPosition(const LLVector3& target);
     LLVector3    getTargetScale() const { return mCurrentState.getTargetScale(); }
 
     /// <summary>
@@ -299,6 +309,19 @@ class FSJointPose
         LLQuaternion getTargetRotation() const { return mRotation * mBaseRotation; }
         LLVector3    getTargetPosition() const { return mPosition + mBasePosition; }
         LLVector3    getTargetScale() const { return mScale + mBaseScale; }
+
+        // Keep Live Link's remote preview aligned with the Poser target,
+        // without creating a Poser user edit or adding to the undo history.
+        // Base transforms are private to FSJointState.
+        void setLiveLinkTargetRotation(const LLQuaternion& target)
+        {
+            mRotation.set(target * ~mBaseRotation);
+        }
+
+        void setLiveLinkTargetPosition(const LLVector3& target)
+        {
+            mPosition.set(target - mBasePosition);
+        }
 
         void reflectRotation()
         {
@@ -484,6 +507,7 @@ class FSJointPose
     /// Whether this joint has ever been changed by poser.
     /// </summary>
     bool mModifiedThisSession{ false };
+    U64 mLiveLinkTargetRevision{ 0 };
 
     std::deque<FSJointState>              mLastSetJointStates;
     size_t                                mUndoneJointStatesIndex      = 0;
