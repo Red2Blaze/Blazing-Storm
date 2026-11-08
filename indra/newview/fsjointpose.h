@@ -263,6 +263,9 @@ class FSJointPose
     /// </summary>
     void revertJoint();
 
+    // Generation changes only for remote Live Link updates, not Poser UI edits.
+    U64 getLiveLinkTargetRevision() const { return mLiveLinkTargetRevision; }
+
     LLQuaternion getTargetRotation() const { return mCurrentState.getTargetRotation(); }
     LLVector3    getTargetPosition() const { return mCurrentState.getTargetPosition(); }
 
@@ -504,6 +507,7 @@ class FSJointPose
     /// Whether this joint has ever been changed by poser.
     /// </summary>
     bool mModifiedThisSession{ false };
+    U64 mLiveLinkTargetRevision{ 0 };
 
     std::deque<FSJointState>              mLastSetJointStates;
     size_t                                mUndoneJointStatesIndex      = 0;
