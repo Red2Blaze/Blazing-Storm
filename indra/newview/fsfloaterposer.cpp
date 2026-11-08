@@ -26,6 +26,7 @@
 
 #include "fsfloaterposer.h"
 #include "fsposeranimator.h"
+#include "fsposingmotion.h"
 #include "fsvirtualtrackpad.h"
 #include "llagent.h"
 #include "llappviewer.h"
@@ -283,8 +284,38 @@ void FSFloaterPoser::onFocusLost()
 
 void FSFloaterPoser::draw()
 {
-    LLFloater::draw();
+    // Live Link silently updates Poser's joint target (without firing the
+    // normal slider callbacks). Refresh the controls only when the currently
+    // selected joint actually receives a new remote value.
+    if (gSavedSettings.getBOOL("BSBlenderLiveLinkEnabled"))
+    {
+        LLVOAvatar* avatar = getUiSelectedAvatar();
+        if (avatar && avatar->isSelf() && mPoserAnimator.isPosingAvatar(avatar))
+        {
+            auto selected = getUiSelectedPoserJoints();
+            if (!selected.empty())
+            {
+                FSPosingMotion* motion = mPoserAnimator.getPosingMotionForLiveLink(avatar);
+                FSJointPose* pose = motion ? motion->getJointPoseByJointName(selected.front()->jointName()) : nullptr;
+                if (pose)
+                {
+                    const U64 revision = pose->getLiveLinkTargetRevision();
+                    if (pose != mLastLiveLinkPose || revision != mLastLiveLinkRevision)
+                    {
+                        mLastLiveLinkPose = pose;
+                        mLastLiveLinkRevision = revision;
+                        // These setValue calls update widgets without firing a
+                        // user edit. Refresh the trackpad/gizmo readout as well.
+                        refreshRotationSlidersAndSpinners();
+                        refreshPositionSlidersAndSpinners();
+                        refreshTrackpadCursor();
+                    }
+                }
+            }
+        }
+    }
 
+    LLFloater::draw();
     drawOnHoverJointHint();
 }
 
