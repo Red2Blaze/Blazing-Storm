@@ -41,6 +41,7 @@ class LLScrollListCtrl;
 class LLSliderCtrl;
 class LLTabContainer;
 class FSLoadPoseTimer;
+class FSJointPose;
 
 /// <summary>
 /// Describes how to load a pose file.
