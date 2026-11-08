@@ -53,12 +53,17 @@ FSJointPose::FSJointPose(LLJoint* joint, U32 usage, bool isCollisionVolume)
 
 void FSJointPose::setLiveLinkTargetRotation(const LLQuaternion& target)
 {
+    // Do not trigger refreshes for unchanged stream heartbeats.
+    if (mCurrentState.getTargetRotation() == target) return;
     mCurrentState.setLiveLinkTargetRotation(target);
+    ++mLiveLinkTargetRevision;
 }
 
 void FSJointPose::setLiveLinkTargetPosition(const LLVector3& target)
 {
+    if (mCurrentState.getTargetPosition() == target) return;
     mCurrentState.setLiveLinkTargetPosition(target);
+    ++mLiveLinkTargetRevision;
 }
 
 void FSJointPose::setPublicPosition(const LLVector3& pos)
