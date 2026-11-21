@@ -675,8 +675,11 @@ bool RlvHandler::processIMQuery(const LLUUID& idSender, const std::string& strMe
     {
         if ("@version" == strMessage)
         {
-            RlvUtil::sendBusyMessage(idSender, RlvStrings::getVersion(LLUUID::null));
-            return true;
+            // <BlazingStorm> Never disclose the RLV version to an avatar via private IM.
+            // Returning false lets the normal IM handler display the request instead
+            // of silently consuming it. Scripted @version=<channel> remains supported.
+            return false;
+            // </BlazingStorm>
         }
         else if ( ("@list" == strMessage) || ("@except" == strMessage) )
         {
